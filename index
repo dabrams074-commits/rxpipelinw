@@ -1,0 +1,2718 @@
+<!DOCTYPE html> 
+
+<html lang="en"> 
+<head> 
+<meta charset="UTF-8"> 
+<meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+<title>Rx Pipeline</title> 
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet"> 
+<style> 
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; } 
+
+:root { 
+–bg: #0d0f14; 
+–surface: #13161e; 
+–card: #181c26; 
+–border: #232840; 
+–accent: #4fffb0; 
+–accent2: #7c6fff; 
+–warn: #ff8c42; 
+–danger: #ff4f6d; 
+–text: #e8eaf2; 
+–muted: #6b7099; 
+–soft: #a0a8c8; 
+–radius: 8px; 
+} 
+
+body { 
+font-family: ‘Instrument Sans’, sans-serif; 
+background: var(–bg); 
+color: var(–text); 
+min-height: 100vh; 
+overflow-x: hidden; 
+} 
+body::before { 
+content: ‘’; 
+position: fixed; top: -200px; left: -200px; 
+width: 600px; height: 600px; 
+background: radial-gradient(circle, rgba(79,255,176,0.04) 0%, transparent 70%); 
+pointer-events: none; z-index: 0; 
+} 
+body::after { 
+content: ‘’; 
+position: fixed; bottom: -200px; right: -100px; 
+width: 500px; height: 500px; 
+background: radial-gradient(circle, rgba(124,111,255,0.05) 0%, transparent 70%); 
+pointer-events: none; z-index: 0; 
+} 
+
+/* ── HEADER ── */ 
+header { 
+position: sticky; top: 0; z-index: 100; 
+background: rgba(13,15,20,0.92); 
+backdrop-filter: blur(16px); 
+border-bottom: 1px solid var(–border); 
+padding: 0 32px; 
+display: flex; align-items: center; gap: 0; 
+height: 64px; 
+} 
+.logo { 
+font-family: ‘DM Serif Display’, serif; 
+font-size: 1.3rem; 
+color: var(–accent); 
+display: flex; align-items: center; gap: 10px; 
+margin-right: 32px; 
+flex-shrink: 0; 
+} 
+.logo-dot { 
+width: 8px; height: 8px; 
+background: var(–accent); border-radius: 50%; 
+box-shadow: 0 0 10px var(–accent); 
+animation: pulse 2s ease-in-out infinite; 
+} 
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} } 
+
+/* ── NAV TABS ── */ 
+.nav-tabs { 
+display: flex; align-items: center; gap: 2px; 
+flex: 1; 
+} 
+.nav-tab { 
+display: flex; align-items: center; gap: 7px; 
+padding: 8px 18px; 
+border-radius: var(–radius); 
+font-family: ‘DM Mono’, monospace; 
+font-size: 0.72rem; 
+font-weight: 500; 
+text-transform: uppercase; 
+letter-spacing: 0.5px; 
+cursor: pointer; 
+border: none; 
+background: transparent; 
+color: var(–muted); 
+transition: all 0.18s; 
+position: relative; 
+} 
+.nav-tab:hover { color: var(–soft); background: rgba(255,255,255,0.04); } 
+.nav-tab.active { color: var(–accent); background: rgba(79,255,176,0.08); } 
+.nav-tab .tab-badge { 
+font-size: 0.6rem; 
+background: rgba(79,255,176,0.15); 
+color: var(–accent); 
+padding: 1px 6px; 
+border-radius: 10px; 
+border: 1px solid rgba(79,255,176,0.2); 
+} 
+
+/* HEADER RIGHT */ 
+.header-right { 
+display: flex; align-items: center; gap: 16px; 
+margin-left: auto; 
+} 
+.stat-pill { 
+font-family: ‘DM Mono’, monospace; 
+font-size: 0.68rem; 
+font-weight: 500; 
+padding: 4px 12px; 
+border-radius: 20px; 
+letter-spacing: 0.5px; 
+text-transform: uppercase; 
+} 
+.stat-pill.s-applied { background: rgba(79,255,176,0.1); color: var(–accent); border: 1px solid rgba(79,255,176,0.2); } 
+.stat-pill.s-int { background: rgba(124,111,255,0.1); color: var(–accent2); border: 1px solid rgba(124,111,255,0.2); } 
+.stat-pill.s-offers { background: rgba(255,140,66,0.1); color: var(–warn); border: 1px solid rgba(255,140,66,0.2); } 
+
+.btn-primary { 
+display: flex; align-items: center; gap: 6px; 
+background: var(–accent); color: #0d0f14; 
+border: none; padding: 8px 18px; 
+border-radius: var(–radius); 
+font-family: ‘Instrument Sans’, sans-serif; 
+font-size: 0.82rem; font-weight: 600; 
+cursor: pointer; transition: all 0.2s; 
+} 
+.btn-primary:hover { background: #2fffa0; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(79,255,176,0.25); } 
+
+/* ── VIEWS ── */ 
+.view { display: none; position: relative; z-index: 1; } 
+.view.active { display: block; } 
+
+/* ── MAIN WRAPPER ── */ 
+.page { max-width: 1400px; margin: 0 auto; padding: 28px 24px; } 
+
+/* ── TOOLBAR ── */ 
+.toolbar { 
+display: flex; align-items: center; gap: 10px; 
+margin-bottom: 24px; flex-wrap: wrap; 
+} 
+.search-wrap { flex: 1; min-width: 200px; position: relative; } 
+.search-wrap svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(–muted); pointer-events: none; } 
+.search-input { 
+width: 100%; 
+background: var(–surface); border: 1px solid var(–border); 
+color: var(–text); padding: 9px 12px 9px 38px; 
+border-radius: var(–radius); 
+font-family: ‘Instrument Sans’, sans-serif; font-size: 0.875rem; 
+outline: none; transition: border-color 0.2s; 
+} 
+.search-input:focus { border-color: var(–accent); } 
+.search-input::placeholder { color: var(–muted); } 
+
+/* ── DROPDOWN FILTERS ── */ 
+.dropdown-wrap { position: relative; } 
+.dropdown-trigger { 
+display: flex; align-items: center; gap: 7px; 
+background: var(–surface); border: 1px solid var(–border); 
+color: var(–soft); padding: 9px 13px; 
+border-radius: var(–radius); 
+font-family: ‘DM Mono’, monospace; font-size: 0.72rem; 
+cursor: pointer; transition: all 0.18s; 
+text-transform: uppercase; letter-spacing: 0.5px; 
+white-space: nowrap; user-select: none; 
+} 
+.dropdown-trigger:hover { border-color: var(–accent); color: var(–accent); background: rgba(79,255,176,0.06); } 
+.dropdown-trigger.active { border-color: var(–accent); color: var(–accent); background: rgba(79,255,176,0.09); } 
+.dropdown-trigger svg:last-child { transition: transform 0.18s; } 
+.dropdown-trigger.open svg:last-child { transform: rotate(180deg); } 
+.active-val { 
+font-size: 0.62rem; 
+background: rgba(79,255,176,0.15); color: var(–accent); 
+padding: 1px 6px; border-radius: 4px; 
+max-width: 86px; overflow: hidden; text-overflow: ellipsis; 
+} 
+.dropdown-menu { 
+position: absolute; top: calc(100% + 6px); left: 0; z-index: 200; 
+background: var(–card); border: 1px solid var(–border); 
+border-radius: var(–radius); padding: 6px; min-width: 190px; 
+box-shadow: 0 8px 32px rgba(0,0,0,0.45); 
+display: none; flex-direction: column; gap: 2px; 
+} 
+.dropdown-menu.open { display: flex; } 
+.dropdown-item { 
+display: flex; align-items: center; justify-content: space-between; 
+padding: 7px 10px; border-radius: 5px; 
+font-family: ‘DM Mono’, monospace; font-size: 0.7rem; 
+color: var(–soft); cursor: pointer; transition: all 0.13s; 
+text-transform: uppercase; letter-spacing: 0.3px; 
+border: none; background: transparent; width: 100%; text-align: left; 
+} 
+.dropdown-item:hover { background: rgba(255,255,255,0.05); color: var(–text); } 
+.dropdown-item.selected { background: rgba(79,255,176,0.09); color: var(–accent); } 
+.dropdown-item .check { 
+width: 14px; height: 14px; border-radius: 3px; 
+border: 1px solid var(–border); flex-shrink: 0; 
+display: flex; align-items: center; justify-content: center; 
+} 
+.dropdown-item.selected .check { background: var(–accent); border-color: var(–accent); } 
+.dropdown-divider { height: 1px; background: var(–border); margin: 4px 0; } 
+
+.filter-clear-btn { 
+background: transparent; border: 1px solid var(–border); 
+color: var(–muted); padding: 9px 14px; 
+border-radius: var(–radius); 
+font-family: ‘DM Mono’, monospace; font-size: 0.7rem; 
+cursor: pointer; transition: all 0.18s; 
+text-transform: uppercase; letter-spacing: 0.5px; 
+} 
+.filter-clear-btn:hover { border-color: var(–danger); color: var(–danger); } 
+
+.result-count { 
+font-family: ‘DM Mono’, monospace; font-size: 0.7rem; 
+color: var(–muted); white-space: nowrap; padding: 0 4px; 
+} 
+
+/* ── INTEGRATED SEARCH BAR ── */ 
+.search-bar { 
+display: flex; align-items: center; 
+background: var(–surface); 
+border: 1px solid var(–border); 
+border-radius: 10px; 
+margin-bottom: 24px; 
+transition: border-color 0.2s; 
+overflow: hidden; 
+} 
+.search-bar:focus-within { border-color: rgba(79,255,176,0.35); } 
+
+.sb-input-wrap { 
+display: flex; align-items: center; gap: 10px; 
+padding: 0 16px; flex: 1; min-width: 0; 
+border-right: 1px solid var(–border); 
+} 
+.sb-input-wrap svg { color: var(–muted); flex-shrink: 0; } 
+.sb-input { 
+background: transparent; border: none; outline: none; 
+color: var(–text); font-family: ‘Instrument Sans’, sans-serif; 
+font-size: 0.875rem; padding: 13px 0; width: 100%; 
+} 
+.sb-input::placeholder { color: var(–muted); } 
+
+.sb-select { 
+background: transparent; border: none; outline: none; 
+color: var(–muted); font-family: ‘DM Mono’, monospace; 
+font-size: 0.68rem; padding: 13px 16px; 
+cursor: pointer; transition: color 0.15s; 
+border-right: 1px solid var(–border); 
+appearance: none; text-transform: uppercase; letter-spacing: 0.5px; 
+white-space: nowrap; flex-shrink: 0; 
+} 
+.sb-select:hover { color: var(–soft); background: rgba(255,255,255,0.02); } 
+.sb-select:focus { color: var(–accent); outline: none; } 
+.sb-select.active { color: var(–accent); } 
+.sb-select option { background: var(–card); color: var(–text); font-family: ‘Instrument Sans’, sans-serif; } 
+
+.sb-divider { width: 1px; background: var(–border); align-self: stretch; flex-shrink: 0; } 
+
+.sb-clear { 
+background: transparent; border: none; 
+color: var(–muted); padding: 13px 16px; 
+cursor: pointer; font-family: ‘DM Mono’, monospace; 
+font-size: 0.65rem; transition: color 0.15s; 
+text-transform: uppercase; letter-spacing: 0.3px; 
+white-space: nowrap; display: none; flex-shrink: 0; 
+} 
+.sb-clear:hover { color: var(–danger); } 
+.sb-clear.show { display: block; } 
+
+/* ── KANBAN ── */ 
+.kanban { 
+display: grid; grid-template-columns: repeat(4,1fr); 
+gap: 14px; align-items: start; 
+} 
+.column { 
+background: var(–surface); border: 1px solid var(–border); 
+border-radius: 10px; overflow: hidden; 
+} 
+.col-header { 
+padding: 13px 15px; 
+display: flex; align-items: center; justify-content: space-between; 
+border-bottom: 1px solid var(–border); 
+} 
+.col-title { 
+font-family: ‘DM Mono’, monospace; font-size: 0.68rem; 
+font-weight: 500; text-transform: uppercase; letter-spacing: 1px; 
+display: flex; align-items: center; gap: 8px; 
+} 
+.col-dot { width: 7px; height: 7px; border-radius: 50%; } 
+.col-count { 
+font-family: ‘DM Mono’, monospace; font-size: 0.68rem; 
+color: var(–muted); background: rgba(255,255,255,0.05); 
+padding: 2px 8px; border-radius: 10px; 
+} 
+.col-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 80px; } 
+
+/* ── JOB CARD ── */ 
+.job-card { 
+background: var(–card); border: 1px solid var(–border); 
+border-radius: var(–radius); padding: 13px; 
+transition: all 0.18s; position: relative; overflow: hidden; 
+} 
+.job-card::before { 
+content: ‘’; position: absolute; 
+left: 0; top: 0; bottom: 0; width: 3px; 
+border-radius: 3px 0 0 3px; 
+} 
+.job-card:hover { border-color: rgba(79,255,176,0.28); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.3); } 
+.pri-high::before { background: var(–danger); } 
+.pri-med::before { background: var(–warn); opacity: 0.7; } 
+.pri-low::before { background: var(–muted); opacity: 0.5; } 
+
+.card-company { font-family: ‘DM Serif Display’, serif; font-size: 0.98rem; color: var(–text); margin-bottom: 2px; line-height: 1.2; } 
+.card-role { font-size: 0.76rem; color: var(–soft); margin-bottom: 9px; line-height: 1.4; } 
+.card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 9px; } 
+.tag { 
+font-family: ‘DM Mono’, monospace; font-size: 0.6rem; 
+padding: 2px 7px; border-radius: 3px; 
+text-transform: uppercase; letter-spacing: 0.3px; 
+} 
+.tag.area { background: rgba(124,111,255,0.12); color: var(–accent2); border: 1px solid rgba(124,111,255,0.15); } 
+.tag.muted { background: rgba(255,255,255,0.05); color: var(–muted); border: 1px solid var(–border); } 
+.tag.green { background: rgba(79,255,176,0.08); color: var(–accent); border: 1px solid rgba(79,255,176,0.15); } 
+.tag.orange { background: rgba(255,140,66,0.08); color: var(–warn); border: 1px solid rgba(255,140,66,0.15); } 
+
+.card-notes { 
+font-size: 0.73rem; color: var(–muted); margin-bottom: 9px; 
+line-height: 1.5; 
+display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; 
+} 
+.card-footer { 
+display: flex; align-items: center; justify-content: space-between; 
+padding-top: 9px; border-top: 1px solid var(–border); 
+} 
+.card-date { font-family: ‘DM Mono’, monospace; font-size: 0.63rem; color: var(–muted); } 
+.card-actions { display: flex; gap: 5px; } 
+.card-btn { 
+display: flex; align-items: center; gap: 4px; 
+font-family: ‘DM Mono’, monospace; font-size: 0.63rem; 
+padding: 4px 8px; border-radius: 4px; 
+border: 1px solid var(–border); cursor: pointer; 
+transition: all 0.13s; text-decoration: none; letter-spacing: 0.3px; 
+} 
+.card-btn.site { background: rgba(79,255,176,0.07); color: var(–accent); border-color: rgba(79,255,176,0.2); } 
+.card-btn.site:hover { background: rgba(79,255,176,0.16); } 
+.card-btn.edit { background: transparent; color: var(–muted); } 
+.card-btn.edit:hover { color: var(–soft); border-color: var(–soft); } 
+.card-btn.del { background: transparent; color: var(–muted); } 
+.card-btn.del:hover { background: rgba(255,79,109,0.1); color: var(–danger); border-color: rgba(255,79,109,0.3); } 
+
+.empty-col { 
+padding: 20px 12px; text-align: center; 
+font-family: ‘DM Mono’, monospace; font-size: 0.66rem; 
+color: var(–muted); text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.6; 
+} 
+
+/* ── MODAL ── */ 
+.modal-overlay { 
+position: fixed; inset: 0; z-index: 500; 
+background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); 
+display: flex; align-items: center; justify-content: center; 
+padding: 24px; opacity: 0; pointer-events: none; transition: opacity 0.2s; 
+} 
+.modal-overlay.open { opacity: 1; pointer-events: all; } 
+.modal { 
+background: var(–card); border: 1px solid var(–border); 
+border-radius: 14px; padding: 28px; 
+width: 100%; max-width: 520px; 
+transform: translateY(16px); transition: transform 0.2s; 
+max-height: 90vh; overflow-y: auto; 
+} 
+.modal-overlay.open .modal { transform: translateY(0); } 
+.modal-title { font-family: ‘DM Serif Display’, serif; font-size: 1.35rem; margin-bottom: 20px; } 
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; } 
+.form-full { grid-column: 1/-1; } 
+.field label { 
+display: block; font-family: ‘DM Mono’, monospace; 
+font-size: 0.65rem; color: var(–muted); 
+text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; 
+} 
+.field input, .field select, .field textarea { 
+width: 100%; background: var(–surface); 
+border: 1px solid var(–border); color: var(–text); 
+padding: 9px 11px; border-radius: var(–radius); 
+font-family: ‘Instrument Sans’, sans-serif; font-size: 0.84rem; 
+outline: none; transition: border-color 0.18s; appearance: none; 
+} 
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(–accent); } 
+.field select { cursor: pointer; } 
+.field textarea { resize: vertical; min-height: 68px; } 
+.modal-actions { 
+display: flex; gap: 10px; justify-content: flex-end; 
+margin-top: 20px; padding-top: 18px; border-top: 1px solid var(–border); 
+} 
+.btn-cancel { 
+background: transparent; border: 1px solid var(–border); color: var(–soft); 
+padding: 9px 20px; border-radius: var(–radius); 
+font-family: ‘Instrument Sans’, sans-serif; font-size: 0.84rem; 
+cursor: pointer; transition: all 0.18s; 
+} 
+.btn-cancel:hover { border-color: var(–soft); color: var(–text); } 
+.btn-save { 
+background: var(–accent); color: #0d0f14; border: none; 
+padding: 9px 24px; border-radius: var(–radius); 
+font-family: ‘Instrument Sans’, sans-serif; font-size: 0.84rem; font-weight: 600; 
+cursor: pointer; transition: all 0.18s; 
+} 
+.btn-save:hover { background: #2fffa0; } 
+
+/* ── LIBRARY ── */ 
+.lib-header { margin-bottom: 22px; } 
+.lib-title { font-family: ‘DM Serif Display’, serif; font-size: 1.7rem; margin-bottom: 5px; } 
+.lib-sub { font-family: ‘DM Mono’, monospace; font-size: 0.7rem; color: var(–muted); letter-spacing: 0.3px; } 
+.lib-sub strong { color: var(–accent); } 
+
+.lib-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; } 
+
+.filter-select { 
+background: var(–surface); border: 1px solid var(–border); 
+color: var(–soft); padding: 9px 13px; 
+border-radius: var(–radius); 
+font-family: ‘DM Mono’, monospace; font-size: 0.7rem; 
+outline: none; cursor: pointer; transition: border-color 0.18s; 
+appearance: none; min-width: 155px; letter-spacing: 0.3px; 
+text-transform: uppercase; 
+} 
+.filter-select:focus, .filter-select:hover { border-color: var(–accent); color: var(–text); } 
+
+.view-toggle { 
+display: flex; background: var(–surface); 
+border: 1px solid var(–border); border-radius: var(–radius); overflow: hidden; 
+} 
+.view-btn { 
+background: transparent; border: none; color: var(–muted); 
+padding: 9px 13px; cursor: pointer; transition: all 0.13s; 
+display: flex; align-items: center; 
+} 
+.view-btn.active { background: rgba(79,255,176,0.1); color: var(–accent); } 
+.view-btn:hover:not(.active) { color: var(–soft); } 
+
+/* COMPANY GRID */ 
+.company-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 11px; } 
+.company-list { display: flex; flex-direction: column; gap: 6px; } 
+
+.co-card { 
+background: var(–card); border: 1px solid var(–border); 
+border-radius: var(–radius); padding: 16px; 
+transition: all 0.18s; position: relative; overflow: hidden; 
+} 
+.co-card::after { 
+content: ‘’; position: absolute; top: 0; left: 0; right: 0; 
+height: 2px; background: linear-gradient(90deg, var(–accent), var(–accent2)); 
+opacity: 0; transition: opacity 0.18s; 
+} 
+.co-card:hover { border-color: rgba(79,255,176,0.25); transform: translateY(-1px); box-shadow: 0 4px 18px rgba(0,0,0,0.3); } 
+.co-card:hover::after { opacity: 1; } 
+
+.co-card-inner { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 9px; } 
+.co-avatar { 
+width: 38px; height: 38px; border-radius: 7px; 
+border: 1px solid var(–border); 
+display: flex; align-items: center; justify-content: center; 
+font-family: ‘DM Serif Display’, serif; font-size: 0.95rem; 
+color: var(–accent); background: rgba(79,255,176,0.06); flex-shrink: 0; 
+} 
+.co-name { font-family: ‘DM Serif Display’, serif; font-size: 0.95rem; color: var(–text); line-height: 1.2; margin-bottom: 2px; } 
+.co-hq { font-family: ‘DM Mono’, monospace; font-size: 0.6rem; color: var(–muted); text-transform: uppercase; letter-spacing: 0.3px; } 
+.co-desc { font-size: 0.73rem; color: var(–muted); line-height: 1.5; margin-bottom: 10px; 
+display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; } 
+.co-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; } 
+.co-tag { font-family: ‘DM Mono’, monospace; font-size: 0.58rem; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px; } 
+.co-tag.t-area { background: rgba(124,111,255,0.12); color: var(–accent2); border: 1px solid rgba(124,111,255,0.15); } 
+.co-tag.t-size { background: rgba(255,255,255,0.05); color: var(–muted); border: 1px solid var(–border); } 
+
+.co-actions { display: flex; gap: 7px; align-items: center; } 
+.btn-visit { 
+display: flex; align-items: center; gap: 5px; 
+font-family: ‘DM Mono’, monospace; font-size: 0.63rem; 
+padding: 5px 11px; border-radius: 4px; 
+border: 1px solid rgba(79,255,176,0.2); 
+background: rgba(79,255,176,0.07); color: var(–accent); 
+text-decoration: none; cursor: pointer; transition: all 0.13s; 
+letter-spacing: 0.3px; text-transform: uppercase; 
+} 
+.btn-visit:hover { background: rgba(79,255,176,0.16); } 
+.btn-add-co { 
+display: flex; align-items: center; gap: 5px; 
+font-family: ‘DM Mono’, monospace; font-size: 0.63rem; 
+padding: 5px 11px; border-radius: 4px; 
+border: 1px solid var(–border); background: transparent; color: var(–soft); 
+cursor: pointer; transition: all 0.13s; letter-spacing: 0.3px; text-transform: uppercase; 
+} 
+.btn-add-co:hover:not(.added) { border-color: var(–accent); color: var(–accent); background: rgba(79,255,176,0.05); } 
+.btn-add-co.added { border-color: rgba(79,255,176,0.3); color: var(–accent); background: rgba(79,255,176,0.08); cursor: default; } 
+
+/* LIST MODE */ 
+.company-list .co-card { padding: 11px 15px; } 
+.company-list .co-card-inner { margin-bottom: 0; align-items: center; } 
+.company-list .co-desc { display: none; } 
+.company-list .co-tags { margin-bottom: 0; } 
+.company-list .co-bottom { display: flex; align-items: center; justify-content: space-between; flex: 1; min-width: 0; gap: 12px; } 
+.company-list .co-main { flex: 1; min-width: 0; } 
+
+/* TOAST */ 
+.toast { 
+position: fixed; bottom: 28px; left: 50%; 
+transform: translateX(-50%) translateY(80px); 
+background: var(–card); border: 1px solid var(–accent); 
+border-radius: var(–radius); padding: 11px 22px; 
+font-family: ‘DM Mono’, monospace; font-size: 0.73rem; color: var(–accent); 
+z-index: 999; transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1); 
+white-space: nowrap; box-shadow: 0 8px 28px rgba(0,0,0,0.4); 
+} 
+.toast.show { transform: translateX(-50%) translateY(0); } 
+
+/* ── NOTES PANEL ── */ 
+.panel-overlay { 
+position: fixed; inset: 0; z-index: 400; 
+background: rgba(0,0,0,0.5); 
+backdrop-filter: blur(3px); 
+opacity: 0; pointer-events: none; 
+transition: opacity 0.25s; 
+} 
+.panel-overlay.open { opacity: 1; pointer-events: all; } 
+
+.notes-panel { 
+position: fixed; top: 0; right: 0; bottom: 0; z-index: 401; 
+width: 420px; max-width: 92vw; 
+background: var(–card); 
+border-left: 1px solid var(–border); 
+display: flex; flex-direction: column; 
+transform: translateX(100%); 
+transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); 
+box-shadow: -8px 0 40px rgba(0,0,0,0.4); 
+} 
+.notes-panel.open { transform: translateX(0); } 
+
+.panel-header { 
+padding: 20px 24px 16px; 
+border-bottom: 1px solid var(–border); 
+display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; 
+} 
+.panel-company { 
+font-family: ‘DM Serif Display’, serif; 
+font-size: 1.2rem; color: var(–text); line-height: 1.2; 
+} 
+.panel-role { font-size: 0.78rem; color: var(–soft); margin-top: 3px; } 
+.panel-close { 
+background: transparent; border: 1px solid var(–border); 
+color: var(–muted); width: 32px; height: 32px; 
+border-radius: 6px; cursor: pointer; 
+display: flex; align-items: center; justify-content: center; 
+flex-shrink: 0; transition: all 0.15s; 
+} 
+.panel-close:hover { border-color: var(–danger); color: var(–danger); } 
+
+.panel-meta { 
+padding: 14px 24px; 
+border-bottom: 1px solid var(–border); 
+display: flex; gap: 8px; flex-wrap: wrap; 
+} 
+
+.panel-body { flex: 1; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; } 
+
+.panel-section-label { 
+font-family: ‘DM Mono’, monospace; font-size: 0.65rem; 
+color: var(–muted); text-transform: uppercase; letter-spacing: 0.8px; 
+margin-bottom: 8px; 
+} 
+
+/* Interview dates */ 
+.interview-list { display: flex; flex-direction: column; gap: 8px; } 
+.interview-item { 
+display: flex; align-items: center; gap: 10px; 
+background: var(–surface); border: 1px solid var(–border); 
+border-radius: 6px; padding: 10px 12px; 
+} 
+.interview-icon { 
+width: 28px; height: 28px; border-radius: 6px; 
+background: rgba(124,111,255,0.12); 
+display: flex; align-items: center; justify-content: center; 
+flex-shrink: 0; color: var(–accent2); 
+} 
+.interview-info { flex: 1; min-width: 0; } 
+.interview-type { font-size: 0.78rem; color: var(–text); font-weight: 500; } 
+.interview-date { font-family: ‘DM Mono’, monospace; font-size: 0.65rem; color: var(–muted); } 
+.interview-del { 
+background: transparent; border: none; color: var(–muted); 
+cursor: pointer; padding: 4px; border-radius: 4px; 
+transition: color 0.15s; 
+} 
+.interview-del:hover { color: var(–danger); } 
+
+.add-interview-row { 
+display: flex; gap: 8px; align-items: center; 
+} 
+.add-interview-row input, .add-interview-row select { 
+background: var(–surface); border: 1px solid var(–border); 
+color: var(–text); padding: 8px 10px; border-radius: 6px; 
+font-family: ‘Instrument Sans’, sans-serif; font-size: 0.8rem; 
+outline: none; transition: border-color 0.15s; 
+} 
+.add-interview-row input:focus, .add-interview-row select:focus { border-color: var(–accent); } 
+.add-interview-row select { min-width: 120px; appearance: none; cursor: pointer; } 
+.add-interview-row input[type=date] { flex: 1; color-scheme: dark; } 
+.btn-add-interview { 
+background: rgba(79,255,176,0.1); border: 1px solid rgba(79,255,176,0.2); 
+color: var(–accent); padding: 8px 14px; border-radius: 6px; 
+font-family: ‘DM Mono’, monospace; font-size: 0.68rem; 
+cursor: pointer; transition: all 0.15s; text-transform: uppercase; 
+letter-spacing: 0.3px; white-space: nowrap; 
+} 
+.btn-add-interview:hover { background: rgba(79,255,176,0.18); } 
+
+/* Notes textarea in panel */ 
+.panel-notes-area { 
+width: 100%; background: var(–surface); 
+border: 1px solid var(–border); color: var(–text); 
+padding: 12px; border-radius: 6px; 
+font-family: ‘Instrument Sans’, sans-serif; font-size: 0.84rem; 
+line-height: 1.6; resize: vertical; min-height: 120px; 
+outline: none; transition: border-color 0.15s; 
+} 
+.panel-notes-area:focus { border-color: var(–accent); } 
+
+/* Activity log */ 
+.activity-list { display: flex; flex-direction: column; gap: 0; } 
+.activity-item { 
+display: flex; gap: 12px; padding: 10px 0; 
+border-bottom: 1px solid rgba(35,40,64,0.5); 
+} 
+.activity-item:last-child { border-bottom: none; } 
+.activity-dot { 
+width: 8px; height: 8px; border-radius: 50%; 
+background: var(–accent); flex-shrink: 0; margin-top: 5px; 
+} 
+.activity-text { font-size: 0.78rem; color: var(–soft); line-height: 1.5; } 
+.activity-time { font-family: ‘DM Mono’, monospace; font-size: 0.62rem; color: var(–muted); margin-top: 2px; } 
+
+.panel-footer { 
+padding: 16px 24px; 
+border-top: 1px solid var(–border); 
+display: flex; gap: 10px; 
+} 
+.btn-panel-save { 
+flex: 1; background: var(–accent); color: #0d0f14; 
+border: none; padding: 10px; border-radius: 6px; 
+font-family: ‘Instrument Sans’, sans-serif; font-size: 0.84rem; font-weight: 600; 
+cursor: pointer; transition: all 0.15s; 
+} 
+.btn-panel-save:hover { background: #2fffa0; } 
+.btn-panel-edit { 
+background: transparent; border: 1px solid var(–border); color: var(–soft); 
+padding: 10px 16px; border-radius: 6px; 
+font-family: ‘Instrument Sans’, monospace; font-size: 0.8rem; 
+cursor: pointer; transition: all 0.15s; 
+} 
+.btn-panel-edit:hover { border-color: var(–soft); color: var(–text); } 
+
+/* Interview date badge on card */ 
+.card-interview-date { 
+font-family: ‘DM Mono’, monospace; font-size: 0.6rem; 
+color: var(–accent2); background: rgba(124,111,255,0.1); 
+border: 1px solid rgba(124,111,255,0.2); 
+padding: 2px 7px; border-radius: 3px; 
+display: inline-flex; align-items: center; gap: 4px; 
+} 
+
+/* Export button */ 
+.btn-export { 
+display: flex; align-items: center; gap: 6px; 
+background: transparent; border: 1px solid var(–border); 
+color: var(–soft); padding: 8px 14px; border-radius: var(–radius); 
+font-family: ‘DM Mono’, monospace; font-size: 0.7rem; 
+cursor: pointer; transition: all 0.18s; text-transform: uppercase; letter-spacing: 0.3px; 
+} 
+.btn-export:hover { border-color: var(–accent); color: var(–accent); background: rgba(79,255,176,0.05); } 
+
+/* SCROLLBAR */ 
+::-webkit-scrollbar { width: 6px; } 
+::-webkit-scrollbar-track { background: transparent; } 
+::-webkit-scrollbar-thumb { background: var(–border); border-radius: 3px; } 
+
+/* ── LIBRARY SUB-TABS ── */ 
+.lib-subtabs { 
+display: flex; gap: 4px; margin-bottom: 22px; 
+border-bottom: 1px solid var(–border); 
+} 
+.lib-subtab { 
+display: flex; align-items: center; gap: 7px; 
+padding: 10px 18px; 
+background: transparent; border: none; 
+font-family: ‘DM Mono’, monospace; font-size: 0.72rem; 
+font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; 
+color: var(–muted); cursor: pointer; transition: all 0.18s; 
+border-bottom: 2px solid transparent; margin-bottom: -1px; 
+} 
+.lib-subtab:hover { color: var(–soft); } 
+.lib-subtab.active { color: var(–accent); border-bottom-color: var(–accent); } 
+.subtab-badge { 
+font-size: 0.62rem; padding: 1px 7px; border-radius: 10px; 
+background: rgba(255,255,255,0.06); color: var(–muted); border: 1px solid var(–border); 
+} 
+.subtab-badge.live { background: rgba(79,255,176,0.1); color: var(–accent); border-color: rgba(79,255,176,0.2); } 
+
+/* ── LIVE ROLE CARDS ── */ 
+.roles-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; } 
+.role-card { 
+background: var(–card); border: 1px solid var(–border); 
+border-radius: var(–radius); padding: 16px 18px; 
+display: grid; grid-template-columns: 1fr auto; 
+gap: 16px; align-items: start; 
+transition: all 0.18s; cursor: pointer; position: relative; overflow: hidden; 
+} 
+.role-card::before { 
+content: ‘’; position: absolute; left: 0; top: 0; bottom: 0; 
+width: 3px; background: var(–accent); opacity: 0; transition: opacity 0.18s; 
+} 
+.role-card:hover { border-color: rgba(79,255,176,0.25); transform: translateX(2px); box-shadow: 0 4px 16px rgba(0,0,0,0.25); } 
+.role-card:hover::before { opacity: 1; } 
+.role-title { font-family: ‘DM Serif Display’, serif; font-size: 1rem; color: var(–text); margin-bottom: 3px; line-height: 1.2; } 
+.role-company { font-size: 0.8rem; color: var(–accent); font-weight: 600; margin-bottom: 9px; } 
+.role-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 9px; } 
+.role-tag { 
+font-family: ‘DM Mono’, monospace; font-size: 0.6rem; 
+padding: 2px 7px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px; 
+} 
+.rt-area { background: rgba(124,111,255,0.12); color: var(–accent2); border: 1px solid rgba(124,111,255,0.15); } 
+.rt-level { background: rgba(79,255,176,0.08); color: var(–accent); border: 1px solid rgba(79,255,176,0.15); } 
+.rt-func { background: rgba(255,140,66,0.08); color: var(–warn); border: 1px solid rgba(255,140,66,0.15); } 
+.rt-loc { background: rgba(255,255,255,0.05); color: var(–muted); border: 1px solid var(–border); } 
+.rt-new { background: rgba(79,255,176,0.15); color: var(–accent); border: 1px solid rgba(79,255,176,0.3); } 
+.role-meta { font-family: ‘DM Mono’, monospace; font-size: 0.65rem; color: var(–muted); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; } 
+.role-comp { color: var(–accent); font-weight: 500; } 
+.role-card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; } 
+.role-posted { font-family: ‘DM Mono’, monospace; font-size: 0.62rem; color: var(–muted); white-space: nowrap; } 
+.btn-role-view { 
+display: flex; align-items: center; gap: 5px; 
+font-family: ‘DM Mono’, monospace; font-size: 0.63rem; 
+padding: 6px 12px; border-radius: 5px; 
+border: 1px solid rgba(79,255,176,0.25); 
+background: rgba(79,255,176,0.08); color: var(–accent); 
+text-decoration: none; transition: all 0.15s; 
+text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; 
+} 
+.btn-role-view:hover { background: rgba(79,255,176,0.18); } 
+.btn-role-add { 
+display: flex; align-items: center; gap: 5px; 
+font-family: ‘DM Mono’, monospace; font-size: 0.63rem; 
+padding: 6px 12px; border-radius: 5px; 
+border: 1px solid var(–border); background: transparent; color: var(–soft); 
+cursor: pointer; transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; 
+} 
+.btn-role-add:hover:not(.added) { border-color: var(–accent); color: var(–accent); background: rgba(79,255,176,0.05); } 
+.btn-role-add.added { border-color: rgba(79,255,176,0.3); color: var(–accent); background: rgba(79,255,176,0.08); cursor: default; } 
+.roles-footer { 
+font-family: ‘DM Mono’, monospace; font-size: 0.65rem; color: var(–muted); 
+display: flex; align-items: center; gap: 8px; 
+padding: 14px 0; border-top: 1px solid var(–border); letter-spacing: 0.3px; 
+} 
+.roles-empty { text-align: center; padding: 60px 24px; font-family: ‘DM Mono’, monospace; font-size: 0.72rem; color: var(–muted); text-transform: uppercase; letter-spacing: 0.5px; } 
+
+/* ── FETCH BAR ── */ 
+.fetch-bar { 
+display: flex; align-items: center; justify-content: space-between; 
+background: var(–surface); border: 1px solid var(–border); 
+border-radius: var(–radius); padding: 12px 18px; 
+margin-bottom: 16px; gap: 16px; flex-wrap: wrap; 
+} 
+.fetch-bar-left { display: flex; align-items: center; gap: 14px; } 
+.fetch-bar-right { display: flex; align-items: center; gap: 12px; } 
+.pfizer-badge { 
+display: flex; align-items: center; gap: 6px; 
+font-family: ‘DM Mono’, monospace; font-size: 0.68rem; 
+color: var(–accent2); background: rgba(124,111,255,0.1); 
+border: 1px solid rgba(124,111,255,0.2); 
+padding: 4px 10px; border-radius: 5px; letter-spacing: 0.3px; 
+} 
+.fetch-status { 
+font-family: ‘DM Mono’, monospace; font-size: 0.7rem; 
+color: var(–muted); letter-spacing: 0.3px; 
+} 
+.fetch-status.loading { color: var(–warn); } 
+.fetch-status.success { color: var(–accent); } 
+.fetch-status.error { color: var(–danger); } 
+.btn-fetch { 
+display: flex; align-items: center; gap: 7px; 
+background: var(–accent); color: #0d0f14; 
+border: none; padding: 9px 20px; border-radius: var(–radius); 
+font-family: ‘Instrument Sans’, sans-serif; font-size: 0.82rem; font-weight: 600; 
+cursor: pointer; transition: all 0.2s; 
+} 
+.btn-fetch:hover { background: #2fffa0; transform: translateY(-1px); } 
+.btn-fetch:disabled { opacity: 0.6; cursor: not-allowed; transform: none; } 
+.btn-fetch.spinning #fetch-icon { animation: spin 1s linear infinite; } 
+@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} } 
+.btn-export-roles { 
+display: flex; align-items: center; gap: 6px; 
+background: transparent; border: 1px solid var(–border); 
+color: var(–soft); padding: 8px 14px; border-radius: var(–radius); 
+font-family: ‘DM Mono’, monospace; font-size: 0.68rem; 
+cursor: pointer; transition: all 0.18s; text-transform: uppercase; letter-spacing: 0.3px; 
+} 
+.btn-export-roles:hover { border-color: var(–accent); color: var(–accent); } 
+.fetch-empty { 
+display: flex; flex-direction: column; align-items: center; 
+padding: 80px 24px; text-align: center; gap: 14px; 
+} 
+.fetch-empty-icon { color: var(–border); } 
+.fetch-empty-title { font-family: ‘DM Serif Display’, serif; font-size: 1.2rem; color: var(–muted); } 
+.fetch-empty-sub { 
+font-family: ‘DM Mono’, monospace; font-size: 0.7rem; color: var(–muted); 
+max-width: 400px; line-height: 1.7; text-transform: uppercase; letter-spacing: 0.3px; 
+} 
+.role-skeleton { 
+background: var(–card); border: 1px solid var(–border); 
+border-radius: var(–radius); padding: 18px; margin-bottom: 8px; 
+animation: shimmer 1.4s ease-in-out infinite; 
+} 
+@keyframes shimmer { 0%,100%{opacity:0.5} 50%{opacity:1} } 
+.skel-line { background: var(–border); border-radius: 3px; margin-bottom: 8px; } 
+.role-dept { 
+font-family: ‘DM Mono’, monospace; font-size: 0.62rem; 
+color: var(–muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.3px; 
+} 
+
+/* ── COMPANY SELECTOR ── */ 
+.company-selector-wrap { 
+background: var(–surface); border: 1px solid var(–border); 
+border-radius: var(–radius); padding: 16px 18px; margin-bottom: 12px; 
+} 
+.cs-header { 
+display: flex; align-items: center; justify-content: space-between; 
+margin-bottom: 14px; 
+} 
+.cs-title { 
+font-family: ‘DM Mono’, monospace; font-size: 0.72rem; 
+color: var(–soft); text-transform: uppercase; letter-spacing: 0.5px; 
+display: flex; align-items: center; gap: 7px; 
+} 
+.cs-actions { display: flex; gap: 8px; } 
+.cs-action-btn { 
+font-family: ‘DM Mono’, monospace; font-size: 0.65rem; 
+text-transform: uppercase; letter-spacing: 0.3px; 
+color: var(–muted); background: transparent; 
+border: 1px solid var(–border); padding: 4px 10px; 
+border-radius: 4px; cursor: pointer; transition: all 0.15s; 
+} 
+.cs-action-btn:hover { color: var(–accent); border-color: var(–accent); } 
+
+.company-checkboxes { 
+display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); 
+gap: 8px; 
+} 
+.co-check-item { 
+display: flex; align-items: center; gap: 10px; 
+background: var(–card); border: 1px solid var(–border); 
+border-radius: 6px; padding: 9px 12px; cursor: pointer; 
+transition: all 0.15s; user-select: none; 
+} 
+.co-check-item:hover { border-color: rgba(79,255,176,0.25); } 
+.co-check-item.selected { border-color: rgba(79,255,176,0.35); background: rgba(79,255,176,0.06); } 
+.co-check-item.error { border-color: rgba(255,79,109,0.35); opacity: 0.7; } 
+.co-check-item.loading { border-color: rgba(255,140,66,0.35); } 
+.co-check-item.done { border-color: rgba(79,255,176,0.4); } 
+
+.co-check-box { 
+width: 16px; height: 16px; border-radius: 4px; 
+border: 1.5px solid var(–border); flex-shrink: 0; 
+display: flex; align-items: center; justify-content: center; 
+transition: all 0.15s; 
+} 
+.co-check-item.selected .co-check-box { 
+background: var(–accent); border-color: var(–accent); 
+} 
+.co-check-name { 
+font-family: ‘Instrument Sans’, sans-serif; font-size: 0.8rem; 
+color: var(–text); flex: 1; min-width: 0; 
+} 
+.co-check-ats { 
+font-family: ‘DM Mono’, monospace; font-size: 0.58rem; 
+color: var(–muted); text-transform: uppercase; letter-spacing: 0.3px; 
+} 
+.co-check-status { 
+font-family: ‘DM Mono’, monospace; font-size: 0.6rem; 
+white-space: nowrap; 
+} 
+.co-check-item.loading .co-check-status { color: var(–warn); } 
+.co-check-item.done .co-check-status { color: var(–accent); } 
+.co-check-item.error .co-check-status { color: var(–danger); } 
+
+/* PROGRESS LIST */ 
+.progress-list { 
+display: flex; flex-direction: column; gap: 6px; 
+margin-bottom: 14px; padding: 14px 16px; 
+background: var(–surface); border: 1px solid var(–border); 
+border-radius: var(–radius); 
+} 
+.progress-item { 
+display: flex; align-items: center; gap: 12px; 
+} 
+.progress-label { 
+font-family: ‘DM Mono’, monospace; font-size: 0.68rem; 
+color: var(–soft); width: 140px; flex-shrink: 0; 
+} 
+.progress-bar-wrap { 
+flex: 1; height: 4px; background: var(–border); border-radius: 2px; overflow: hidden; 
+} 
+.progress-bar-fill { 
+height: 100%; border-radius: 2px; 
+background: var(–accent); transition: width 0.3s ease; 
+} 
+.progress-count { 
+font-family: ‘DM Mono’, monospace; font-size: 0.62rem; 
+color: var(–muted); width: 60px; text-align: right; flex-shrink: 0; 
+} 
+
+@media (max-width: 960px) { 
+.kanban { grid-template-columns: 1fr 1fr; } 
+.stat-pill { display: none; } 
+} 
+@media (max-width: 640px) { 
+header { padding: 0 14px; } 
+.kanban { grid-template-columns: 1fr; } 
+.page { padding: 18px 12px; } 
+.company-grid { grid-template-columns: 1fr; } 
+.form-grid { grid-template-columns: 1fr; } 
+.logo { margin-right: 16px; } 
+} 
+</style> 
+
+</head> 
+<body> 
+
+<!-- ══ HEADER ══ --> 
+
+<header> 
+<div class="logo"><div class="logo-dot"></div>Rx Pipeline</div> 
+<nav class="nav-tabs"> 
+<button class="nav-tab active" id="tab-tracker" onclick="switchView('tracker')"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg> 
+My Tracker 
+<span class="tab-badge" id="tracker-badge">0</span> 
+</button> 
+<button class="nav-tab" id="tab-library" onclick="switchView('library')"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg> 
+Company Library 
+<span class="tab-badge" id="lib-badge">120</span> 
+</button> 
+</nav> 
+<div class="header-right"> 
+<span class="stat-pill s-applied" id="stat-applied">0 Applied</span> 
+<span class="stat-pill s-int" id="stat-int">0 Interviewing</span> 
+<span class="stat-pill s-offers" id="stat-offers">0 Offers</span> 
+<button class="btn-export" onclick="exportCSV()" title="Export to CSV"> 
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 
+Export CSV 
+</button> 
+<button class="btn-primary" id="header-action" onclick="openModal()"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 
+Add Role 
+</button> 
+</div> 
+</header> 
+
+<!-- ══ TRACKER VIEW ══ --> 
+
+<div class="view active" id="view-tracker"> 
+<div class="page"> 
+
+``` 
+<!-- Integrated Search Bar --> 
+<div class="search-bar"> 
+<div class="sb-input-wrap"> 
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 
+<input class="sb-input" type="text" id="t-search" placeholder="Search companies or roles…" oninput="renderTracker();updateClearBtn()"> 
+</div> 
+<select class="sb-select" id="sb-area" onchange="tFilters.area=this.value;this.classList.toggle('active',!!this.value);updateClearBtn();renderTracker()"> 
+<option value="">All Areas</option> 
+<option>Oncology</option> 
+<option>Rare Disease</option> 
+<option>Immunology</option> 
+<option>Vaccines</option> 
+<option>Neuroscience</option> 
+<option>Cardiovascular</option> 
+<option>Metabolic / Endocrine</option> 
+<option>Infectious Disease</option> 
+<option>Ophthalmology</option> 
+<option>Diversified</option> 
+<option>Other</option> 
+</select> 
+<select class="sb-select" id="sb-level" onchange="tFilters.level=this.value;this.classList.toggle('active',!!this.value);updateClearBtn();renderTracker()"> 
+<option value="">All Levels</option> 
+<option>Analyst</option> 
+<option>Associate</option> 
+<option>Manager</option> 
+<option>Senior Manager</option> 
+<option>Director</option> 
+<option>Senior Director</option> 
+<option>VP</option> 
+<option value="SVP / EVP">SVP / EVP</option> 
+<option>C-Suite</option> 
+</select> 
+<select class="sb-select" id="sb-func" onchange="tFilters.func=this.value;this.classList.toggle('active',!!this.value);updateClearBtn();renderTracker()"> 
+<option value="">All Functions</option> 
+<option>Forecasting</option> 
+<option>Commercial Analytics</option> 
+<option>Market Access</option> 
+<option>Medical Affairs</option> 
+<option>Finance</option> 
+<option>Business Development</option> 
+<option>Strategy</option> 
+<option>Marketing</option> 
+<option>Clinical</option> 
+<option>Regulatory</option> 
+<option>Operations</option> 
+<option>Other</option> 
+</select> 
+<select class="sb-select" id="sb-type" onchange="tFilters.type=this.value;this.classList.toggle('active',!!this.value);updateClearBtn();renderTracker()" style="border-right:none"> 
+<option value="">All Types</option> 
+<option>Full-Time</option> 
+<option>Contract</option> 
+<option>Consulting</option> 
+<option value="Interim">Interim / Fractional</option> 
+<option>Remote</option> 
+<option>Hybrid</option> 
+</select> 
+<button class="sb-clear" id="sb-clear-btn" onclick="clearSearchBar()">✕ Clear</button> 
+</div> 
+
+<!-- Kanban --> 
+<div class="kanban"> 
+<div class="column"> 
+<div class="col-header"><div class="col-title"><div class="col-dot" style="background:#6b7099"></div>Sourced</div><span class="col-count" id="cnt-Sourced">0</span></div> 
+<div class="col-body" id="body-Sourced"></div> 
+</div> 
+<div class="column"> 
+<div class="col-header"><div class="col-title"><div class="col-dot" style="background:#4fffb0"></div>Applied</div><span class="col-count" id="cnt-Applied">0</span></div> 
+<div class="col-body" id="body-Applied"></div> 
+</div> 
+<div class="column"> 
+<div class="col-header"><div class="col-title"><div class="col-dot" style="background:#7c6fff"></div>Interviewing</div><span class="col-count" id="cnt-Interviewing">0</span></div> 
+<div class="col-body" id="body-Interviewing"></div> 
+</div> 
+<div class="column"> 
+<div class="col-header"><div class="col-title"><div class="col-dot" style="background:#ff8c42"></div>Offer / Closed</div><span class="col-count" id="cnt-Offer">0</span></div> 
+<div class="col-body" id="body-Offer"></div> 
+</div> 
+</div> 
+``` 
+
+</div> 
+</div> 
+
+<!-- ══ LIBRARY VIEW ══ --> 
+
+<div class="view" id="view-library"> 
+<div class="page"> 
+<div class="lib-header"> 
+<div class="lib-title">Company Library</div> 
+<div class="lib-sub"><strong id="lib-count">1</strong> company · <strong id="live-roles-count">20 sources</strong> · live job fetcher across Workday, Greenhouse &amp; Workable ATS systems</div> 
+</div> 
+
+``` 
+<!-- Sub-tabs --> 
+<div class="lib-subtabs"> 
+<button class="lib-subtab active" id="subtab-companies" onclick="switchLibTab('companies')"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> 
+Companies 
+<span class="subtab-badge" id="sb-companies">62</span> 
+</button> 
+<button class="lib-subtab" id="subtab-roles" onclick="switchLibTab('roles')"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 
+Live Roles 
+<span class="subtab-badge live" id="sb-roles">28</span> 
+</button> 
+</div> 
+
+<!-- Companies Panel --> 
+<div id="lib-panel-companies"> 
+<div class="lib-toolbar"> 
+<div class="search-wrap"> 
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 
+<input class="search-input" type="text" id="l-search" placeholder="Search companies…" oninput="renderLibrary()"> 
+</div> 
+<select class="filter-select" id="l-area" onchange="renderLibrary()"> 
+<option value="">All Areas</option> 
+<option>Oncology</option><option>Rare Disease</option><option>Immunology</option> 
+<option>Neuroscience</option><option>Cardiovascular</option><option>Vaccines</option> 
+<option>Metabolic / Endocrine</option><option>Infectious Disease</option> 
+<option>Ophthalmology</option><option>Diversified</option> 
+</select> 
+<select class="filter-select" id="l-size" onchange="renderLibrary()"> 
+<option value="">All Sizes</option> 
+<option>Large Pharma</option><option>Mid-Size</option><option>Biotech</option><option>Emerging</option> 
+</select> 
+<select class="filter-select" id="l-hq" onchange="renderLibrary()"> 
+<option value="">All Locations</option> 
+<option>US</option><option>Europe</option><option>Global</option> 
+</select> 
+<span class="result-count" id="l-count"></span> 
+<div class="view-toggle"> 
+<button class="view-btn active" id="vbtn-grid" onclick="setLibView('grid')" title="Grid"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> 
+</button> 
+<button class="view-btn" id="vbtn-list" onclick="setLibView('list')" title="List"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg> 
+</button> 
+</div> 
+</div> 
+<div id="lib-container" class="company-grid"></div> 
+</div> 
+
+<!-- Live Roles Panel --> 
+<div id="lib-panel-roles" style="display:none"> 
+
+<!-- Company selector grid --> 
+<div class="company-selector-wrap"> 
+<div class="cs-header"> 
+<div class="cs-title"> 
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg> 
+Select Companies to Fetch 
+</div> 
+<div class="cs-actions"> 
+<button class="cs-action-btn" onclick="selectAllCompanies()">Select All</button> 
+<button class="cs-action-btn" onclick="selectNoneCompanies()">Clear</button> 
+</div> 
+</div> 
+<div class="company-checkboxes" id="company-checkboxes"></div> 
+</div> 
+
+<!-- Fetch bar --> 
+<div class="fetch-bar"> 
+<div class="fetch-bar-left"> 
+<span class="fetch-status" id="fetch-status">Select companies above and click fetch</span> 
+</div> 
+<div class="fetch-bar-right"> 
+<span class="result-count" id="r-count"></span> 
+<button class="btn-fetch" id="btn-fetch" onclick="fetchAllCompanyJobs()"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="fetch-icon"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> 
+Fetch Live Jobs 
+</button> 
+</div> 
+</div> 
+
+<!-- Progress bars (shown during fetch) --> 
+<div id="fetch-progress" style="display:none"> 
+<div class="progress-list" id="progress-list"></div> 
+</div> 
+
+<!-- Filters (hidden until data loaded) --> 
+<div class="lib-toolbar" id="roles-filters" style="display:none"> 
+<div class="search-wrap"> 
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> 
+<input class="search-input" type="text" id="r-search" placeholder="Search title, department, location…" oninput="renderRoles()"> 
+</div> 
+<select class="filter-select" id="r-company" onchange="renderRoles()"> 
+<option value="">All Companies</option> 
+</select> 
+<select class="filter-select" id="r-dept" onchange="renderRoles()"> 
+<option value="">All Departments</option> 
+</select> 
+<select class="filter-select" id="r-loc" onchange="renderRoles()"> 
+<option value="">All Locations</option> 
+</select> 
+<button class="filter-clear-btn" id="r-clear-btn" onclick="clearRoleFilters()" style="display:none">✕ Clear</button> 
+<button class="btn-export-roles" onclick="exportRolesCSV()"> 
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 
+Export CSV 
+</button> 
+</div> 
+
+<div id="roles-container"> 
+<div class="fetch-empty"> 
+<div class="fetch-empty-icon"> 
+<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg> 
+</div> 
+<div class="fetch-empty-title">No jobs loaded yet</div> 
+<div class="fetch-empty-sub">Select one or more companies above, then click Fetch Live Jobs to pull listings directly from their career sites</div> 
+</div> 
+</div> 
+
+<div class="roles-footer" id="roles-footer" style="display:none"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> 
+<span id="footer-text">Live data pulled directly from company career sites via Workday API · Click any role to view · + Tracker adds to your pipeline</span> 
+</div> 
+</div> 
+``` 
+
+</div> 
+</div> 
+
+<!-- ══ MODAL ══ --> 
+
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()"> 
+<div class="modal"> 
+<div class="modal-title" id="modalTitle">Add Role</div> 
+<div class="form-grid"> 
+<div class="field form-full"><label>Company Name *</label><input type="text" id="f-company" placeholder="e.g. Ascendis Pharma"></div> 
+<div class="field form-full"><label>Role / Title *</label><input type="text" id="f-role" placeholder="e.g. Director, US Forecasting"></div> 
+<div class="field form-full"><label>Careers URL</label><input type="url" id="f-url" placeholder="https://careers.company.com/…"></div> 
+<div class="field"><label>Therapeutic Area</label> 
+<select id="f-area"> 
+<option value="">— Select —</option> 
+<option>Oncology</option><option>Rare Disease</option><option>Immunology</option> 
+<option>Vaccines</option><option>Neuroscience</option><option>Cardiovascular</option> 
+<option>Metabolic / Endocrine</option><option>Infectious Disease</option> 
+<option>Ophthalmology</option><option>Other</option> 
+</select> 
+</div> 
+<div class="field"><label>Job Type</label> 
+<select id="f-jobtype"> 
+<option value="">— Select —</option> 
+<option>Full-Time</option><option>Contract</option><option>Consulting</option> 
+<option value="Interim">Interim / Fractional</option><option>Remote</option><option>Hybrid</option> 
+</select> 
+</div> 
+<div class="field"><label>Job Level</label> 
+<select id="f-level"> 
+<option value="">— Select —</option> 
+<option>Analyst</option><option>Associate</option><option>Manager</option> 
+<option>Senior Manager</option><option>Director</option><option>Senior Director</option> 
+<option>VP</option><option value="SVP / EVP">SVP / EVP</option><option>C-Suite</option> 
+</select> 
+</div> 
+<div class="field"><label>Job Function</label> 
+<select id="f-func"> 
+<option value="">— Select —</option> 
+<option>Commercial Analytics</option><option>Forecasting</option><option>Market Access</option> 
+<option>Medical Affairs</option><option>Finance</option><option>Business Development</option> 
+<option>Strategy</option><option>Marketing</option><option>Clinical</option> 
+<option>Regulatory</option><option>Operations</option><option>Other</option> 
+</select> 
+</div> 
+<div class="field"><label>Stage</label> 
+<select id="f-stage"> 
+<option value="Sourced">Sourced</option><option value="Applied">Applied</option> 
+<option value="Interviewing">Interviewing</option><option value="Offer">Offer / Closed</option> 
+</select> 
+</div> 
+<div class="field"><label>Priority</label> 
+<select id="f-priority"><option value="med">Medium</option><option value="high">High</option><option value="low">Low</option></select> 
+</div> 
+<div class="field form-full"><label>Recruiter / Contact</label><input type="text" id="f-recruiter" placeholder="e.g. Sarah Holecko"></div> 
+<div class="field"><label>Next Interview Date</label><input type="date" id="f-intdate" style="color-scheme:dark"></div> 
+<div class="field"><label>Interview Type</label> 
+<select id="f-inttype"> 
+<option value="">— Select —</option> 
+<option>Phone Screen</option><option>Hiring Manager</option> 
+<option>Panel Interview</option><option>Case Study</option> 
+<option>Final Round</option><option>Offer Call</option> 
+</select> 
+</div> 
+<div class="field form-full"><label>Notes</label><textarea id="f-notes" placeholder="Key details, pipeline, follow-up actions…"></textarea></div> 
+</div> 
+<div class="modal-actions"> 
+<button class="btn-cancel" onclick="closeModal()">Cancel</button> 
+<button class="btn-save" onclick="saveJob()">Save Role</button> 
+</div> 
+</div> 
+</div> 
+
+<!-- ══ NOTES PANEL ══ --> 
+
+<div class="panel-overlay" id="panelOverlay" onclick="closePanel()"></div> 
+<div class="notes-panel" id="notesPanel"> 
+<div class="panel-header"> 
+<div> 
+<div class="panel-company" id="panel-company">—</div> 
+<div class="panel-role" id="panel-role">—</div> 
+</div> 
+<button class="panel-close" onclick="closePanel()"> 
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 
+</button> 
+</div> 
+<div class="panel-meta" id="panel-meta"></div> 
+<div class="panel-body"> 
+
+``` 
+<!-- Interview Dates --> 
+<div> 
+<div class="panel-section-label">Interview Schedule</div> 
+<div class="interview-list" id="panel-interviews"></div> 
+<div class="add-interview-row" style="margin-top:10px"> 
+<select id="pi-type" style="appearance:none"> 
+<option value="">Type</option> 
+<option>Phone Screen</option><option>Hiring Manager</option> 
+<option>Panel Interview</option><option>Case Study</option> 
+<option>Final Round</option><option>Offer Call</option> 
+</select> 
+<input type="date" id="pi-date" style="color-scheme:dark"> 
+<button class="btn-add-interview" onclick="addInterview()">+ Add</button> 
+</div> 
+</div> 
+
+<!-- Notes --> 
+<div> 
+<div class="panel-section-label">Notes &amp; Context</div> 
+<textarea class="panel-notes-area" id="panel-notes" placeholder="Pipeline details, key contacts, compensation range, follow-up actions…"></textarea> 
+</div> 
+
+<!-- Activity Log --> 
+<div> 
+<div class="panel-section-label">Activity Log</div> 
+<div class="activity-list" id="panel-activity"></div> 
+</div> 
+``` 
+
+</div> 
+<div class="panel-footer"> 
+<button class="btn-panel-edit" onclick="closePanel();editJob(panelJobId)">Edit Role</button> 
+<button class="btn-panel-save" onclick="savePanel()">Save Notes</button> 
+</div> 
+</div> 
+
+<div class="toast" id="toast"></div> 
+
+<script> 
+// ══════════════════════════════════════════ 
+// SHARED UTILITIES 
+// ══════════════════════════════════════════ 
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); } 
+function uid(){ return Math.random().toString(36).slice(2,10); } 
+function todayStr(offset=0){ const d=new Date(); d.setDate(d.getDate()+offset); return d.toISOString().slice(0,10); } 
+function fmtDate(s){ if(!s)return ''; const d=new Date(s+'T00:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); } 
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent='✓ '+msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); } 
+
+// ══════════════════════════════════════════ 
+// VIEW SWITCHING 
+// ══════════════════════════════════════════ 
+let currentView = 'tracker'; 
+function switchView(v){ 
+currentView = v; 
+document.getElementById('view-tracker').classList.toggle('active', v==='tracker'); 
+document.getElementById('view-library').classList.toggle('active', v==='library'); 
+document.getElementById('tab-tracker').classList.toggle('active', v==='tracker'); 
+document.getElementById('tab-library').classList.toggle('active', v==='library'); 
+const btn = document.getElementById('header-action'); 
+if(v==='tracker'){ 
+btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Role'; 
+btn.onclick = openModal; 
+} else { 
+btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add Role'; 
+btn.onclick = openModal; 
+renderLibrary(); 
+} 
+} 
+
+// ══════════════════════════════════════════ 
+// TRACKER 
+// ══════════════════════════════════════════ 
+const STAGES = ['Sourced','Applied','Interviewing','Offer']; 
+let jobs = []; 
+let editId = null; 
+let tFilters = { area:'', type:'', level:'', func:'' }; 
+
+const SEED = [ 
+
+// ── SOURCED (5 roles) ── 
+{ 
+id:uid(), company:'Eli Lilly', role:'Director, Commercial Forecasting — Cardiometabolic', 
+url:'https://careers.lilly.com/', area:'Metabolic / Endocrine', jobtype:'Hybrid', 
+level:'Director', func:'Forecasting', stage:'Sourced', priority:'high', recruiter:'', 
+notes:'GLP-1 franchise (Mounjaro, Zepbound) driving massive forecast complexity. Looking for someone to own the obesity & T2D commercial forecast. Role reports to VP Commercial Analytics. Comp range ~$220-260k TCC. Worth targeting — strong pipeline visibility.', 
+interviews:[], date:todayStr(-14), 
+activity:[{text:'Role added to pipeline',time:new Date(Date.now()-14*86400000).toISOString()}] 
+}, 
+{ 
+id:uid(), company:'Regeneron', role:'Senior Director, Commercial Analytics & Insights', 
+url:'https://careers.regeneron.com/', area:'Immunology', jobtype:'Full-Time', 
+level:'Senior Director', func:'Commercial Analytics', stage:'Sourced', priority:'high', recruiter:'', 
+notes:'Dupixent franchise analytics role. Huge scope — atopic derm, asthma, COPD, prurigo nodularis, EoE. Team of ~8 analysts. Reports to Chief Commercial Officer. Strong stock comp. NYC or Tarrytown NY. Need to research hiring manager before applying.', 
+interviews:[], date:todayStr(-11), 
+activity:[{text:'Role added to pipeline',time:new Date(Date.now()-11*86400000).toISOString()}] 
+}, 
+{ 
+id:uid(), company:'Biogen', role:'Director, Forecasting & Strategic Analytics', 
+url:'https://careers.biogen.com/', area:'Neuroscience', jobtype:'Hybrid', 
+level:'Director', func:'Forecasting', stage:'Sourced', priority:'med', recruiter:'', 
+notes:'Leqembi (lecanemab) Alzheimer\'s launch forecasting. Very complex patient funnel — diagnosis rates, MRI monitoring, infusion capacity. Also covers MS base business. Cambridge MA. Interesting scientifically but watch for pipeline risk post-Biogen restructuring.', 
+interviews:[], date:todayStr(-9), 
+activity:[{text:'Role added to pipeline',time:new Date(Date.now()-9*86400000).toISOString()}] 
+}, 
+{ 
+id:uid(), company:'Gilead Sciences', role:'Director, Commercial Analytics — HIV & Oncology', 
+url:'https://jobs.gilead.com/', area:'Infectious Disease', jobtype:'Full-Time', 
+level:'Director', func:'Commercial Analytics', stage:'Sourced', priority:'med', recruiter:'', 
+notes:'Dual remit: HIV PrEP franchise (Descovy, Yeztugo/lenacapavir) + oncology (Trodelvy). Two very different market dynamics. Foster City CA or remote. Known for strong comp and work-life balance. Check if role requires relocation.', 
+interviews:[], date:todayStr(-7), 
+activity:[{text:'Role added to pipeline',time:new Date(Date.now()-7*86400000).toISOString()}] 
+}, 
+{ 
+id:uid(), company:'Karuna Therapeutics / BMS', role:'Director, Neuroscience Forecasting', 
+url:'https://careers.bms.com/', area:'Neuroscience', jobtype:'Hybrid', 
+level:'Director', func:'Forecasting', stage:'Sourced', priority:'low', recruiter:'', 
+notes:'Post-acquisition role for Cobenfy (KarXT) schizophrenia launch. BMS acquired Karuna for $14B. Forecast will need to model competitive dynamics vs. generic antipsychotics + Ingrezza + pipeline. Princeton NJ. Lower priority — BMS culture can be slow.', 
+interviews:[], date:todayStr(-5), 
+activity:[{text:'Role added to pipeline',time:new Date(Date.now()-5*86400000).toISOString()}] 
+}, 
+
+// ── APPLIED (4 roles) ── 
+{ 
+id:uid(), company:'Acadia Pharmaceuticals', role:'Director, Forecasting & Market Analytics', 
+url:'https://www.acadiapharmaceuticals.com/careers/', area:'Neuroscience', jobtype:'Full-Time', 
+level:'Director', func:'Forecasting', stage:'Applied', priority:'high', recruiter:'Jennifer Walsh (Korn Ferry)', 
+notes:'Applied 5/1. Cover letter emphasized rare CNS forecasting experience and patient-based modeling. Nuplazid (pimavanserin) + Daybue (trofinetide) in Rett syndrome. Small but growing commercial team. San Diego HQ. JD referenced IQVIA DDD and patient claims data.', 
+interviews:[], date:todayStr(-18), 
+activity:[ 
+{text:'Role added to pipeline',time:new Date(Date.now()-18*86400000).toISOString()}, 
+{text:'Application submitted via careers portal',time:new Date(Date.now()-13*86400000).toISOString()}, 
+{text:'Cover letter tailored — emphasized CNS rare disease forecasting',time:new Date(Date.now()-13*86400000).toISOString()} 
+] 
+}, 
+{ 
+id:uid(), company:'Esperion Therapeutics', role:'Director, Commercial Strategy & Forecasting', 
+url:'https://www.esperion.com/careers/', area:'Cardiovascular', jobtype:'Full-Time', 
+level:'Director', func:'Forecasting', stage:'Applied', priority:'high', recruiter:'', 
+notes:'Applied 5/3 via LinkedIn. Nexletol/Nexlizet bempedoic acid franchise. Small company — this would be a senior standalone role with high visibility. Ann Arbor MI or remote. Comp likely $190-220k. Watch for counter-offer situation if Ascendis moves forward.', 
+interviews:[], date:todayStr(-20), 
+activity:[ 
+{text:'Role added to pipeline',time:new Date(Date.now()-20*86400000).toISOString()}, 
+{text:'Application submitted via LinkedIn Easy Apply',time:new Date(Date.now()-10*86400000).toISOString()} 
+] 
+}, 
+{ 
+id:uid(), company:'Genmab', role:'Senior Director, Commercial Analytics', 
+url:'https://www.genmab.com/careers/', area:'Oncology', jobtype:'Full-Time', 
+level:'Senior Director', func:'Commercial Analytics', stage:'Applied', priority:'med', recruiter:'Rachel Torres (Heidrick & Struggles)', 
+notes:'Applied via recruiter 4/28. Tivdak (tisotumab vedotin) ADC in cervical cancer. Also Epkinly (epcoritamab) bispecific in DLBCL with AbbVie. Copenhagen HQ with Princeton NJ commercial office. Global role — would need to manage EU/US forecast alignment. Strong pipeline.', 
+interviews:[], date:todayStr(-22), 
+activity:[ 
+{text:'Role added to pipeline',time:new Date(Date.now()-22*86400000).toISOString()}, 
+{text:'Recruiter Rachel Torres reached out via LinkedIn',time:new Date(Date.now()-15*86400000).toISOString()}, 
+{text:'Resume submitted via recruiter',time:new Date(Date.now()-14*86400000).toISOString()} 
+] 
+}, 
+{ 
+id:uid(), company:'Alnylam Pharmaceuticals', role:'Director, Forecasting — Rare Disease Portfolio', 
+url:'https://www.alnylam.com/careers/', area:'Rare Disease', jobtype:'Full-Time', 
+level:'Director', func:'Forecasting', stage:'Applied', priority:'med', recruiter:'', 
+notes:'Applied 5/5. RNAi platform — Onpattro, Givlaari, Oxlumo, Amvuttra, Leqvio (partnered with Novartis). All rare/ultra-rare diseases with tiny patient populations. Cambridge MA. Would need to model epidemiology-based funnels from scratch for each asset.', 
+interviews:[], date:todayStr(-25), 
+activity:[ 
+{text:'Role added to pipeline',time:new Date(Date.now()-25*86400000).toISOString()}, 
+{text:'Application submitted via Workday portal',time:new Date(Date.now()-8*86400000).toISOString()} 
+] 
+}, 
+
+// ── INTERVIEWING (4 roles) ── 
+{ 
+id:uid(), company:'Ascendis Pharma', role:'Director, US Forecasting', 
+url:'https://www.ascendispharma.com/careers/', area:'Rare Disease', jobtype:'Full-Time', 
+level:'Director', func:'Forecasting', stage:'Interviewing', priority:'high', 
+recruiter:'Sarah Holecko (TSP Talent)', 
+notes:'Top priority. TransCon platform — YORVIPATH (hypoparathyroidism), SKYTROFA (pediatric GHD), YUVIWEL (achondroplasia). All rare endocrine. Patient funnel model built for prep. Hiring manager is VP US Commercial — focus on bottoms-up methodology and rare disease epidemiology. Comp: $240-280k TCC + equity. Princeton NJ office.', 
+interviews:[ 
+{type:'Phone Screen', date:todayStr(-8)}, 
+{type:'Hiring Manager', date:todayStr(-3)}, 
+{type:'Panel Interview', date:todayStr(5)} 
+], 
+date:todayStr(-30), 
+activity:[ 
+{text:'Role added to pipeline',time:new Date(Date.now()-30*86400000).toISOString()}, 
+{text:'Recruiter Sarah Holecko reached out',time:new Date(Date.now()-20*86400000).toISOString()}, 
+{text:'Phone Screen scheduled — Sarah Holecko',time:new Date(Date.now()-12*86400000).toISOString()}, 
+{text:'Phone Screen completed — strong positive signal',time:new Date(Date.now()-8*86400000).toISOString()}, 
+{text:'Hiring Manager interview scheduled',time:new Date(Date.now()-5*86400000).toISOString()}, 
+{text:'Hiring Manager interview completed — asked to return for panel',time:new Date(Date.now()-3*86400000).toISOString()}, 
+{text:'Panel Interview scheduled for next week',time:new Date(Date.now()-1*86400000).toISOString()} 
+] 
+}, 
+{ 
+id:uid(), company:'Vertex Pharmaceuticals', role:'VP, Forecasting & Commercial Analytics', 
+url:'https://www.vrtx.com/careers/', area:'Rare Disease', jobtype:'Full-Time', 
+level:'VP', func:'Forecasting', stage:'Interviewing', priority:'high', 
+recruiter:'Michael Stern (Spencer Stuart)', 
+notes:'VP-level — step up from current Director. CF franchise (Trikafta) + sickle cell (Casgevy with CRISPR Tx) + APOL1-mediated kidney disease (inaxaplin). Very complex portfolio with different market dynamics. Boston MA. Two rounds complete. Final round TBD — waiting on scheduling. Would be managing team of 6.', 
+interviews:[ 
+{type:'Phone Screen', date:todayStr(-15)}, 
+{type:'Hiring Manager', date:todayStr(-7)}, 
+{type:'Case Study', date:todayStr(3)} 
+], 
+date:todayStr(-35), 
+activity:[ 
+{text:'Role added to pipeline',time:new Date(Date.now()-35*86400000).toISOString()}, 
+{text:'Phone Screen completed',time:new Date(Date.now()-15*86400000).toISOString()}, 
+{text:'Hiring Manager interview — went very well',time:new Date(Date.now()-7*86400000).toISOString()}, 
+{text:'Case Study exercise assigned — 72hr turnaround',time:new Date(Date.now()-4*86400000).toISOString()}, 
+{text:'Case Study submitted',time:new Date(Date.now()-1*86400000).toISOString()} 
+] 
+}, 
+{ 
+id:uid(), company:'Argenx', role:'Director, Commercial Analytics — US', 
+url:'https://www.argenx.com/careers', area:'Immunology', jobtype:'Full-Time', 
+level:'Director', func:'Commercial Analytics', stage:'Interviewing', priority:'med', 
+recruiter:'', 
+notes:'Vyvgart (efgartigimod) FcRn inhibitor platform. Launched in gMG, expanding into CIDP, ITP, pemphigus vulgaris. Fast-moving commercial organization. NYC or remote. Second round next week. Panel includes medical affairs lead and market access VP.', 
+interviews:[ 
+{type:'Phone Screen', date:todayStr(-10)}, 
+{type:'Panel Interview', date:todayStr(2)} 
+], 
+date:todayStr(-28), 
+activity:[ 
+{text:'Role added to pipeline',time:new Date(Date.now()-28*86400000).toISOString()}, 
+{text:'Application submitted',time:new Date(Date.now()-18*86400000).toISOString()}, 
+{text:'Phone Screen completed — positive',time:new Date(Date.now()-10*86400000).toISOString()}, 
+{text:'Panel interview scheduled',time:new Date(Date.now()-2*86400000).toISOString()} 
+] 
+}, 
+{ 
+id:uid(), company:'Sarepta Therapeutics', role:'Senior Director, Commercial Forecasting', 
+url:'https://www.sarepta.com/careers/', area:'Rare Disease', jobtype:'Hybrid', 
+level:'Senior Director', func:'Forecasting', stage:'Interviewing', priority:'med', 
+recruiter:'Dana Kim (Talencio)', 
+notes:'Elevidys gene therapy for Duchenne MD — most expensive drug on market at $3.2M one-time dose. Forecast is essentially a capacity/access model, not traditional demand. Cambridge MA. Good comp package. Third-round final scheduled. Competition is reportedly down to 2 candidates.', 
+interviews:[ 
+{type:'Phone Screen', date:todayStr(-18)}, 
+{type:'Hiring Manager', date:todayStr(-10)}, 
+{type:'Final Round', date:todayStr(7)} 
+], 
+date:todayStr(-40), 
+activity:[ 
+{text:'Role added to pipeline',time:new Date(Date.now()-40*86400000).toISOString()}, 
+{text:'Phone Screen via recruiter Dana Kim',time:new Date(Date.now()-18*86400000).toISOString()}, 
+{text:'Hiring Manager interview — strong fit signal',time:new Date(Date.now()-10*86400000).toISOString()}, 
+{text:'Final round scheduled — 2 candidates remaining',time:new Date(Date.now()-2*86400000).toISOString()} 
+] 
+}, 
+
+// ── OFFER / CLOSED (3 roles) ── 
+{ 
+id:uid(), company:'Pfizer', role:'Director, Comirnaty Forecast & Commercial Insights', 
+url:'https://www.pfizer.com/about/careers', area:'Vaccines', jobtype:'Full-Time', 
+level:'Director', func:'Forecasting', stage:'Offer', priority:'low', 
+recruiter:'Internal referral', 
+notes:'Current role — included for comparison. COVID vaccine franchise. Rebuilt forecast model from scratch 2022-2024. Strong brand recognition but limited pipeline upside in vaccines. Reason for exploring: limited growth trajectory post-COVID contraction. Offer from Ascendis or Vertex would be decisive.', 
+interviews:[], date:todayStr(-90), 
+activity:[ 
+{text:'Current employer — tracking for context',time:new Date(Date.now()-90*86400000).toISOString()} 
+] 
+}, 
+{ 
+id:uid(), company:'Blueprint Medicines', role:'Director, Commercial Analytics', 
+url:'https://www.blueprintmedicines.com/careers/', area:'Oncology', jobtype:'Full-Time', 
+level:'Director', func:'Commercial Analytics', stage:'Offer', priority:'low', 
+recruiter:'', 
+notes:'CLOSED — declined to proceed. Ayvakit (avapritinib) in systemic mastocytosis and GIST. Interesting science but Cambridge MA office mandatory 4 days/week. Comp also came in light at $195k base. Pulled application after Ascendis and Vertex moved forward.', 
+interviews:[ 
+{type:'Phone Screen', date:todayStr(-25)}, 
+{type:'Hiring Manager', date:todayStr(-18)} 
+], 
+date:todayStr(-45), 
+activity:[ 
+{text:'Role added to pipeline',time:new Date(Date.now()-45*86400000).toISOString()}, 
+{text:'Phone Screen completed',time:new Date(Date.now()-25*86400000).toISOString()}, 
+{text:'Hiring Manager interview',time:new Date(Date.now()-18*86400000).toISOString()}, 
+{text:'Withdrew — comp and location concerns',time:new Date(Date.now()-10*86400000).toISOString()} 
+] 
+}, 
+{ 
+id:uid(), company:'Ultragenyx Pharmaceutical', role:'Senior Director, Forecasting & Portfolio Analytics', 
+url:'https://www.ultragenyx.com/careers/', area:'Rare Disease', jobtype:'Full-Time', 
+level:'Senior Director', func:'Forecasting', stage:'Offer', priority:'low', 
+recruiter:'Alex Brennan (Korn Ferry)', 
+notes:'OFFER RECEIVED — $235k base, $47k target bonus, $180k RSU grant. Novato CA HQ — requires relocation. Rare genetic disease portfolio (PKU, XLH, Angelman, MPS). Passed — relocation to Bay Area not viable. Good benchmark for comp expectations in rare disease space.', 
+interviews:[ 
+{type:'Phone Screen', date:todayStr(-35)}, 
+{type:'Hiring Manager', date:todayStr(-28)}, 
+{type:'Panel Interview', date:todayStr(-21)}, 
+{type:'Final Round', date:todayStr(-14)} 
+], 
+date:todayStr(-55), 
+activity:[ 
+{text:'Role added to pipeline',time:new Date(Date.now()-55*86400000).toISOString()}, 
+{text:'Phone Screen',time:new Date(Date.now()-35*86400000).toISOString()}, 
+{text:'Hiring Manager — very strong match',time:new Date(Date.now()-28*86400000).toISOString()}, 
+{text:'Panel interview — met team of 4',time:new Date(Date.now()-21*86400000).toISOString()}, 
+{text:'Final round — CEO and CFO',time:new Date(Date.now()-14*86400000).toISOString()}, 
+{text:'Offer received: $235k base + $47k bonus + $180k RSU',time:new Date(Date.now()-7*86400000).toISOString()}, 
+{text:'Offer declined — relocation to Bay Area not viable',time:new Date(Date.now()-5*86400000).toISOString()} 
+] 
+}, 
+]; 
+
+function saveJobs(){ try{ localStorage.setItem('rxp-jobs', JSON.stringify(jobs)); }catch(e){} } 
+function loadJobs(){ 
+try{ 
+const d = localStorage.getItem('rxp-jobs'); 
+if(d && JSON.parse(d).length > 0){ 
+jobs = JSON.parse(d); 
+} else { 
+jobs = JSON.parse(JSON.stringify(SEED)); 
+saveJobs(); 
+} 
+} catch(e){ jobs = JSON.parse(JSON.stringify(SEED)); } 
+} 
+
+// ══════════════════════════════════════════ 
+// NOTES PANEL 
+// ══════════════════════════════════════════ 
+let panelJobId = null; 
+
+function openPanel(id){ 
+const j = jobs.find(x=>x.id===id); if(!j) return; 
+panelJobId = id; 
+document.getElementById('panel-company').textContent = j.company||''; 
+document.getElementById('panel-role').textContent = j.role||'—'; 
+document.getElementById('panel-notes').value = j.notes||''; 
+const stageColor = {Sourced:'muted',Applied:'green',Interviewing:'muted',Offer:'orange'}; 
+document.getElementById('panel-meta').innerHTML = [ 
+j.stage?`<span class="tag ${stageColor[j.stage]||'muted'}" style="${j.stage==='Interviewing'?'background:rgba(124,111,255,0.12);color:var(--accent2);border:1px solid rgba(124,111,255,0.2)':''}">${esc(j.stage)}</span>`:'', 
+j.area?`<span class="tag area">${esc(j.area)}</span>`:'', 
+j.level?`<span class="tag green">${esc(j.level)}</span>`:'', 
+j.func?`<span class="tag orange">${esc(j.func)}</span>`:'', 
+].join(''); 
+renderPanelInterviews(j); 
+renderActivity(j); 
+document.getElementById('panelOverlay').classList.add('open'); 
+document.getElementById('notesPanel').classList.add('open'); 
+} 
+
+function closePanel(){ 
+document.getElementById('panelOverlay').classList.remove('open'); 
+document.getElementById('notesPanel').classList.remove('open'); 
+panelJobId = null; 
+} 
+
+function savePanel(){ 
+const j = jobs.find(x=>x.id===panelJobId); if(!j) return; 
+const newNotes = document.getElementById('panel-notes').value.trim(); 
+if(newNotes !== j.notes){ 
+j.notes = newNotes; 
+if(!j.activity) j.activity=[]; 
+j.activity.unshift({ text:'Notes updated', time:new Date().toISOString() }); 
+} 
+saveJobs(); renderTracker(); showToast('Notes saved'); 
+renderActivity(j); 
+} 
+
+// ── INTERVIEW DATES ── 
+function renderPanelInterviews(j){ 
+const list = document.getElementById('panel-interviews'); 
+const ivs = j.interviews||[]; 
+if(!ivs.length){ 
+list.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:0.68rem;color:var(--muted);padding:8px 0;text-transform:uppercase;letter-spacing:.3px">No interviews scheduled</div>'; 
+return; 
+} 
+list.innerHTML = ivs.map((iv,i)=>` 
+<div class="interview-item"> 
+<div class="interview-icon"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> 
+</div> 
+<div class="interview-info"> 
+<div class="interview-type">${esc(iv.type||'Interview')}</div> 
+<div class="interview-date">${fmtDateLong(iv.date)}</div> 
+</div> 
+<button class="interview-del" onclick="removeInterview(${i})" title="Remove"> 
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> 
+</button> 
+</div>`).join(''); 
+} 
+
+function fmtDateLong(s){ 
+if(!s) return ''; 
+const d = new Date(s+'T00:00:00'); 
+return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'}); 
+} 
+
+function addInterview(){ 
+const type = document.getElementById('pi-type').value; 
+const date = document.getElementById('pi-date').value; 
+if(!date){ showToast('Please select a date'); return; } 
+const j = jobs.find(x=>x.id===panelJobId); if(!j) return; 
+if(!j.interviews) j.interviews=[]; 
+j.interviews.push({ type:type||'Interview', date }); 
+j.interviews.sort((a,b)=>a.date.localeCompare(b.date)); 
+if(!j.activity) j.activity=[]; 
+j.activity.unshift({ text:`${type||'Interview'} scheduled — ${fmtDateLong(date)}`, time:new Date().toISOString() }); 
+if(j.stage==='Sourced'||j.stage==='Applied') j.stage='Interviewing'; 
+saveJobs(); 
+document.getElementById('pi-type').value=''; 
+document.getElementById('pi-date').value=''; 
+renderPanelInterviews(j); renderActivity(j); renderTracker(); 
+showToast('Interview added'); 
+} 
+
+function removeInterview(idx){ 
+const j = jobs.find(x=>x.id===panelJobId); if(!j||!j.interviews) return; 
+const removed = j.interviews.splice(idx,1)[0]; 
+if(!j.activity) j.activity=[]; 
+j.activity.unshift({ text:`Removed ${removed.type||'interview'} — ${fmtDateLong(removed.date)}`, time:new Date().toISOString() }); 
+saveJobs(); renderPanelInterviews(j); renderActivity(j); renderTracker(); 
+} 
+
+function renderActivity(j){ 
+const list = document.getElementById('panel-activity'); 
+const acts = (j.activity||[]).slice(0,12); 
+if(!acts.length){ 
+list.innerHTML='<div style="font-family:\'DM Mono\',monospace;font-size:0.68rem;color:var(--muted);padding:8px 0;text-transform:uppercase;letter-spacing:.3px">No activity yet</div>'; 
+return; 
+} 
+list.innerHTML = acts.map(a=>` 
+<div class="activity-item"> 
+<div class="activity-dot"></div> 
+<div> 
+<div class="activity-text">${esc(a.text)}</div> 
+<div class="activity-time">${fmtRelTime(a.time)}</div> 
+</div> 
+</div>`).join(''); 
+} 
+
+function fmtRelTime(iso){ 
+if(!iso) return ''; 
+const mins = Math.floor((Date.now()-new Date(iso).getTime())/60000); 
+if(mins<1) return 'just now'; 
+if(mins<60) return `${mins}m ago`; 
+const hrs = Math.floor(mins/60); 
+if(hrs<24) return `${hrs}h ago`; 
+return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric'}); 
+} 
+
+// ══════════════════════════════════════════ 
+// CSV EXPORT 
+// ══════════════════════════════════════════ 
+function exportCSV(){ 
+if(!jobs.length){ showToast('No jobs to export'); return; } 
+const headers = ['Company','Role','Stage','Priority','Therapeutic Area','Job Type','Level','Function','Recruiter','Careers URL','Date Added','Next Interview Date','Interview Type','Notes']; 
+const rows = jobs.map(j=>{ 
+const nextIv = j.interviews&&j.interviews.length ? j.interviews[0] : null; 
+return [ 
+j.company, j.role, j.stage, 
+j.priority==='high'?'High':j.priority==='low'?'Low':'Medium', 
+j.area, j.jobtype, j.level, j.func, j.recruiter, j.url, j.date, 
+nextIv?nextIv.date:'', nextIv?nextIv.type:'', 
+(j.notes||'').replace(/\n/g,' ') 
+].map(v=>'"'+(String(v||'').replace(/"/g,'""'))+'"'); 
+}); 
+const csv = [headers.join(','),...rows.map(r=>r.join(','))].join('\n'); 
+const blob = new Blob([csv],{type:'text/csv'}); 
+const a = document.createElement('a'); 
+a.href = URL.createObjectURL(blob); 
+a.download = `rxpipeline-${todayStr()}.csv`; 
+a.click(); URL.revokeObjectURL(a.href); 
+showToast(`Exported ${jobs.length} roles to CSV`); 
+} 
+
+function clearSearchBar(){ 
+document.getElementById('t-search').value = ''; 
+['sb-area','sb-level','sb-func','sb-type'].forEach(id=>{ 
+const el = document.getElementById(id); 
+if(el){ el.value=''; el.classList.remove('active'); } 
+}); 
+tFilters = { area:'', type:'', level:'', func:'' }; 
+document.getElementById('sb-clear-btn').classList.remove('show'); 
+renderTracker(); 
+} 
+
+function clearTrackerFilters(){ clearSearchBar(); } 
+
+function updateClearBtn(){ 
+const q = document.getElementById('t-search').value; 
+const any = q || tFilters.area || tFilters.type || tFilters.level || tFilters.func; 
+document.getElementById('sb-clear-btn').classList.toggle('show', !!any); 
+} 
+
+function filteredJobs(){ 
+const q = document.getElementById('t-search').value.toLowerCase(); 
+return jobs.filter(j=>{ 
+const mQ = !q || j.company.toLowerCase().includes(q) || j.role.toLowerCase().includes(q) || (j.area||'').toLowerCase().includes(q); 
+const mA = !tFilters.area || j.area===tFilters.area; 
+const mT = !tFilters.type || j.jobtype===tFilters.type; 
+const mL = !tFilters.level || j.level===tFilters.level; 
+const mF = !tFilters.func || j.func===tFilters.func; 
+return mQ && mA && mT && mL && mF; 
+}); 
+} 
+
+function renderTracker(){ 
+const vis = filteredJobs(); 
+STAGES.forEach(s=>{ 
+const items = vis.filter(j=>j.stage===s); 
+document.getElementById('cnt-'+s).textContent = items.length; 
+document.getElementById('body-'+s).innerHTML = items.length===0 
+? '<div class="empty-col">No roles</div>' 
+: items.map(j=>jobCardHTML(j)).join(''); 
+}); 
+updateTrackerStats(); 
+document.getElementById('tracker-badge').textContent = jobs.length; 
+} 
+
+function jobCardHTML(j){ 
+const nextIv = j.interviews&&j.interviews.length ? j.interviews[0] : null; 
+const ivBadge = nextIv ? `<span class="card-interview-date"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${fmtDate(nextIv.date)}</span>` : ''; 
+return `<div class="job-card pri-${j.priority||'med'}" id="card-${j.id}" onclick="openPanel('${j.id}')" style="cursor:pointer"> 
+<div class="card-company">${esc(j.company)}</div> 
+<div class="card-role">${esc(j.role||'—')}</div> 
+<div class="card-tags"> 
+${j.area?`<span class="tag area">${esc(j.area)}</span>`:''} 
+${j.level?`<span class="tag green">${esc(j.level)}</span>`:''} 
+${j.func?`<span class="tag orange">${esc(j.func)}</span>`:''} 
+${j.jobtype?`<span class="tag muted">${esc(j.jobtype)}</span>`:''} 
+${ivBadge} 
+</div> 
+${j.notes?`<div class="card-notes">${esc(j.notes)}</div>`:''} 
+<div class="card-footer"> 
+<span class="card-date">${fmtDate(j.date)}</span> 
+<div class="card-actions"> 
+<a class="card-btn site" href="${esc(j.url||'#')}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open careers page"> 
+<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> 
+Careers 
+</a> 
+<button class="card-btn edit" onclick="event.stopPropagation();editJob('${j.id}')" title="Edit"> 
+<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> 
+</button> 
+<button class="card-btn del" onclick="event.stopPropagation();deleteJob('${j.id}')" title="Remove"> 
+<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg> 
+</button> 
+</div> 
+</div> 
+</div>`; 
+} 
+
+function updateTrackerStats(){ 
+document.getElementById('stat-applied').textContent = `${jobs.filter(j=>j.stage==='Applied').length} Applied`; 
+document.getElementById('stat-int').textContent = `${jobs.filter(j=>j.stage==='Interviewing').length} Interviewing`; 
+document.getElementById('stat-offers').textContent = `${jobs.filter(j=>j.stage==='Offer').length} Offers`; 
+} 
+
+// ── MODAL ── 
+function openModal(reset=true){ 
+if(reset){ 
+editId=null; 
+document.getElementById('modalTitle').textContent='Add Role'; 
+['f-company','f-role','f-url','f-recruiter','f-notes'].forEach(id=>document.getElementById(id).value=''); 
+['f-area','f-jobtype','f-level','f-func','f-intdate','f-inttype'].forEach(id=>document.getElementById(id).value=''); 
+document.getElementById('f-stage').value='Sourced'; 
+document.getElementById('f-priority').value='med'; 
+} 
+document.getElementById('modalOverlay').classList.add('open'); 
+} 
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); } 
+
+function editJob(id){ 
+const j=jobs.find(x=>x.id===id); if(!j) return; 
+editId=id; 
+document.getElementById('modalTitle').textContent='Edit Role'; 
+document.getElementById('f-company').value=j.company||''; 
+document.getElementById('f-role').value=j.role||''; 
+document.getElementById('f-url').value=j.url||''; 
+document.getElementById('f-area').value=j.area||''; 
+document.getElementById('f-jobtype').value=j.jobtype||''; 
+document.getElementById('f-level').value=j.level||''; 
+document.getElementById('f-func').value=j.func||''; 
+document.getElementById('f-stage').value=j.stage||'Sourced'; 
+document.getElementById('f-priority').value=j.priority||'med'; 
+document.getElementById('f-recruiter').value=j.recruiter||''; 
+document.getElementById('f-notes').value=j.notes||''; 
+// Next interview 
+const nextIv = j.interviews&&j.interviews.length ? j.interviews[0] : null; 
+document.getElementById('f-intdate').value = nextIv ? nextIv.date : ''; 
+document.getElementById('f-inttype').value = nextIv ? nextIv.type : ''; 
+openModal(false); 
+} 
+
+function saveJob(){ 
+const company=document.getElementById('f-company').value.trim(); 
+const role=document.getElementById('f-role').value.trim(); 
+if(!company||!role){ alert('Company and role are required.'); return; } 
+const intDate = document.getElementById('f-intdate').value; 
+const intType = document.getElementById('f-inttype').value; 
+const data = { 
+company, role, 
+url: document.getElementById('f-url').value.trim(), 
+area: document.getElementById('f-area').value, 
+jobtype: document.getElementById('f-jobtype').value, 
+level: document.getElementById('f-level').value, 
+func: document.getElementById('f-func').value, 
+stage: document.getElementById('f-stage').value, 
+priority: document.getElementById('f-priority').value, 
+recruiter: document.getElementById('f-recruiter').value.trim(), 
+notes: document.getElementById('f-notes').value.trim(), 
+}; 
+if(editId){ 
+const j=jobs.find(x=>x.id===editId); 
+if(j){ 
+const oldStage = j.stage; 
+Object.assign(j, data); 
+if(!j.activity) j.activity=[]; 
+if(oldStage !== data.stage) j.activity.unshift({ text:`Stage changed: ${oldStage} → ${data.stage}`, time:new Date().toISOString() }); 
+// Update interview if provided 
+if(intDate){ 
+if(!j.interviews) j.interviews=[]; 
+const exists = j.interviews.find(iv=>iv.date===intDate&&iv.type===(intType||'Interview')); 
+if(!exists){ 
+j.interviews.push({ type:intType||'Interview', date:intDate }); 
+j.interviews.sort((a,b)=>a.date.localeCompare(b.date)); 
+j.activity.unshift({ text:`${intType||'Interview'} scheduled — ${fmtDateLong(intDate)}`, time:new Date().toISOString() }); 
+} 
+} 
+} 
+} else { 
+const newJob = { id:uid(), date:todayStr(), interviews:[], activity:[], ...data }; 
+if(intDate){ 
+newJob.interviews.push({ type:intType||'Interview', date:intDate }); 
+newJob.activity.push({ text:`Role added — ${intType||'Interview'} on ${fmtDateLong(intDate)}`, time:new Date().toISOString() }); 
+} else { 
+newJob.activity.push({ text:'Role added to pipeline', time:new Date().toISOString() }); 
+} 
+jobs.push(newJob); 
+} 
+saveJobs(); closeModal(); renderTracker(); 
+} 
+
+function deleteJob(id){ 
+if(!confirm('Remove this role?')) return; 
+jobs=jobs.filter(j=>j.id!==id); 
+// also clear from added set 
+addedSet.delete(jobs.find?.(j=>j.id===id)?.company); 
+saveJobs(); renderTracker(); renderLibrary(); 
+} 
+
+// ══════════════════════════════════════════ 
+// COMPANY LIBRARY 
+// ══════════════════════════════════════════ 
+const COMPANIES = [ 
+{ name:'Pfizer', area:'Diversified', size:'Large Pharma', hq:'US', url:'https://pfizer.wd1.myworkdayjobs.com/PfizerCareers', desc:'Use the Live Roles tab to fetch all active Pfizer jobs directly from their Workday career site.' }, 
+]; 
+let addedSet = new Set(JSON.parse(localStorage.getItem('rxp-added-cos')||'[]')); 
+let libView = 'grid'; 
+
+function saveAdded(){ try{ localStorage.setItem('rxp-added-cos', JSON.stringify([...addedSet])); }catch(e){} } 
+
+function filteredCompanies(){ 
+const q = document.getElementById('l-search').value.toLowerCase(); 
+const area = document.getElementById('l-area').value; 
+const size = document.getElementById('l-size').value; 
+const hq = document.getElementById('l-hq').value; 
+return COMPANIES.filter(c=>{ 
+const mQ = !q || c.name.toLowerCase().includes(q) || c.area.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q); 
+return mQ && (!area||c.area===area) && (!size||c.size===size) && (!hq||c.hq===hq); 
+}); 
+} 
+
+function renderLibrary(){ 
+const list = filteredCompanies(); 
+const container = document.getElementById('lib-container'); 
+document.getElementById('l-count').textContent = list.length+' companies'; 
+if(list.length===0){ container.innerHTML='<div style="padding:60px;text-align:center;font-family:DM Mono,monospace;font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">No companies match your filters</div>'; return; } 
+container.innerHTML = list.map(c=>coCardHTML(c)).join(''); 
+} 
+
+function coCardHTML(c){ 
+const added = addedSet.has(c.name); 
+return `<div class="co-card"> 
+<div class="co-card-inner"> 
+<div class="co-avatar">${c.name.charAt(0)}</div> 
+<div> 
+<div class="co-name">${esc(c.name)}</div> 
+<div class="co-hq">${esc(c.hq)}</div> 
+</div> 
+</div> 
+<div class="co-desc">${esc(c.desc)}</div> 
+<div class="co-tags"> 
+<span class="co-tag t-area">${esc(c.area)}</span> 
+<span class="co-tag t-size">${esc(c.size)}</span> 
+</div> 
+<div class="co-actions"> 
+<a class="btn-visit" href="${esc(c.url)}" target="_blank" rel="noopener"> 
+<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> 
+Careers 
+</a> 
+<button class="btn-add-co ${added?'added':''}" onclick="addToTracker(${JSON.stringify(c).replace(/"/g,'&quot;')},this)"> 
+${added 
+? `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Added` 
+: `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> + Tracker` 
+} 
+</button> 
+</div> 
+</div>`; 
+} 
+
+function addToTracker(c, btn){ 
+if(addedSet.has(c.name)) return; 
+addedSet.add(c.name); saveAdded(); 
+if(!jobs.find(j=>j.company===c.name)){ 
+jobs.push({ id:uid(), company:c.name, role:'', url:c.url, area:c.area, jobtype:'', level:'', func:'', stage:'Sourced', priority:'med', recruiter:'', notes:c.desc, date:todayStr() }); 
+saveJobs(); 
+} 
+btn.classList.add('added'); 
+btn.innerHTML=`<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Added`; 
+btn.onclick=null; 
+document.getElementById('tracker-badge').textContent = jobs.length; 
+updateTrackerStats(); 
+showToast(`${c.name} added to tracker`); 
+} 
+
+function setLibView(mode){ 
+libView=mode; 
+document.getElementById('lib-container').className = mode==='grid' ? 'company-grid' : 'company-list'; 
+document.getElementById('vbtn-grid').classList.toggle('active', mode==='grid'); 
+document.getElementById('vbtn-list').classList.toggle('active', mode==='list'); 
+} 
+
+// ── LIB TAB SWITCHING ── 
+let currentLibTab = 'companies'; 
+
+function switchLibTab(tab){ 
+currentLibTab = tab; 
+document.getElementById('subtab-companies').classList.toggle('active', tab==='companies'); 
+document.getElementById('subtab-roles').classList.toggle('active', tab==='roles'); 
+document.getElementById('lib-panel-companies').style.display = tab==='companies' ? '' : 'none'; 
+document.getElementById('lib-panel-roles').style.display = tab==='roles' ? '' : 'none'; 
+} 
+
+// ══════════════════════════════════════════ 
+// MULTI-COMPANY LIVE JOB FETCHER 
+// ══════════════════════════════════════════ 
+
+// Company registry — Workday tenants confirmed for pharma/biotech 
+const FETCH_COMPANIES = [ 
+{ name:'Pfizer', ats:'Workday', subdomain:'pfizer', tenant:'PfizerCareers', wdNum:1 }, 
+{ name:'Merck', ats:'Workday', subdomain:'merck', tenant:'MerckCareers', wdNum:1 }, 
+{ name:'Eli Lilly', ats:'Workday', subdomain:'lilly', tenant:'LillyCareers', wdNum:5 }, 
+{ name:'AstraZeneca', ats:'Workday', subdomain:'astrazeneca',tenant:'Careers', wdNum:3 }, 
+{ name:'Novartis', ats:'Workday', subdomain:'novartis', tenant:'Novartis_Careers', wdNum:3 }, 
+{ name:'GSK', ats:'Workday', subdomain:'gsk', tenant:'GSK_External_Career_Site', wdNum:3 }, 
+{ name:'Regeneron', ats:'Workday', subdomain:'regeneron', tenant:'External', wdNum:1 }, 
+{ name:'Biogen', ats:'Workday', subdomain:'biogen', tenant:'BiogenCareers', wdNum:1 }, 
+{ name:'Gilead', ats:'Workday', subdomain:'gilead', tenant:'Gilead_Careers', wdNum:1 }, 
+{ name:'Vertex', ats:'Workday', subdomain:'vrtx', tenant:'careers', wdNum:1 }, 
+{ name:'Amgen', ats:'Workday', subdomain:'amgen', tenant:'Careers', wdNum:1 }, 
+{ name:'Sanofi', ats:'Workday', subdomain:'sanofi', tenant:'Sanofi', wdNum:3 }, 
+{ name:'BMS', ats:'Workday', subdomain:'bms', tenant:'External', wdNum:5 }, 
+{ name:'Takeda', ats:'Workday', subdomain:'takeda', tenant:'External', wdNum:1 }, 
+{ name:'AbbVie', ats:'Workday', subdomain:'abbvie', tenant:'External', wdNum:1 }, 
+{ name:'Moderna', ats:'Workday', subdomain:'modernatx', tenant:'ModernaCareers', wdNum:1 }, 
+{ name:'Alnylam', ats:'Greenhouse', subdomain:'', tenant:'alnylam', wdNum:0 }, 
+{ name:'Argenx', ats:'Greenhouse', subdomain:'', tenant:'argenx', wdNum:0 }, 
+{ name:'Ascendis', ats:'Workable', subdomain:'', tenant:'ascendis-pharma', wdNum:0 }, 
+{ name:'Acadia', ats:'Workday', subdomain:'acadia', tenant:'AcadiaCareers', wdNum:1 }, 
+]; 
+
+let all_jobs = []; // all fetched jobs across companies 
+let pfizer_filtered = []; 
+let addedRoleSet = new Set(JSON.parse(localStorage.getItem('rxp-added-roles')||'[]')); 
+let selectedCompanies = new Set(['Pfizer','Merck','Eli Lilly','Regeneron','Biogen','Gilead','Vertex','BMS']); 
+
+function saveAddedRoles(){ try{ localStorage.setItem('rxp-added-roles', JSON.stringify([...addedRoleSet])); }catch(e){} } 
+
+// ── BUILD COMPANY CHECKBOXES ── 
+function buildCompanyCheckboxes(){ 
+const wrap = document.getElementById('company-checkboxes'); 
+wrap.innerHTML = FETCH_COMPANIES.map(c=>` 
+<div class="co-check-item ${selectedCompanies.has(c.name)?'selected':''}" 
+id="cc-${c.name.replace(/\s/g,'-')}" 
+onclick="toggleCoSelect('${c.name}',this)"> 
+<div class="co-check-box"> 
+${selectedCompanies.has(c.name)?'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0d0f14" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>':''} 
+</div> 
+<div style="flex:1;min-width:0"> 
+<div class="co-check-name">${esc(c.name)}</div> 
+<div class="co-check-ats">${esc(c.ats)}</div> 
+</div> 
+<div class="co-check-status" id="cs-${c.name.replace(/\s/g,'-')}"></div> 
+</div>`).join(''); 
+} 
+
+function toggleCoSelect(name, el){ 
+if(selectedCompanies.has(name)){ 
+selectedCompanies.delete(name); 
+el.classList.remove('selected'); 
+el.querySelector('.co-check-box').innerHTML=''; 
+} else { 
+selectedCompanies.add(name); 
+el.classList.add('selected'); 
+el.querySelector('.co-check-box').innerHTML='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0d0f14" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'; 
+} 
+} 
+
+function selectAllCompanies(){ 
+FETCH_COMPANIES.forEach(c=>{ 
+selectedCompanies.add(c.name); 
+const el = document.getElementById('cc-'+c.name.replace(/\s/g,'-')); 
+if(el){ el.classList.add('selected'); el.querySelector('.co-check-box').innerHTML='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0d0f14" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'; } 
+}); 
+} 
+
+function selectNoneCompanies(){ 
+selectedCompanies.clear(); 
+FETCH_COMPANIES.forEach(c=>{ 
+const el = document.getElementById('cc-'+c.name.replace(/\s/g,'-')); 
+if(el){ el.classList.remove('selected'); el.querySelector('.co-check-box').innerHTML=''; } 
+}); 
+} 
+
+// ── MAIN FETCH ORCHESTRATOR ── 
+async function fetchAllCompanyJobs(){ 
+const selected = FETCH_COMPANIES.filter(c=>selectedCompanies.has(c.name)); 
+if(!selected.length){ showToast('Select at least one company'); return; } 
+
+const btn = document.getElementById('btn-fetch'); 
+const statusEl = document.getElementById('fetch-status'); 
+const container = document.getElementById('roles-container'); 
+const progressDiv = document.getElementById('fetch-progress'); 
+const progressList = document.getElementById('progress-list'); 
+
+btn.disabled=true; btn.classList.add('spinning'); 
+statusEl.className='fetch-status loading'; 
+statusEl.textContent=`Fetching from ${selected.length} companies…`; 
+container.innerHTML=skeletons(8); 
+progressDiv.style.display='block'; 
+all_jobs = []; 
+
+// Build progress rows 
+progressList.innerHTML = selected.map(c=>` 
+<div class="progress-item" id="pi-${c.name.replace(/\s/g,'-')}"> 
+<div class="progress-label">${esc(c.name)}</div> 
+<div class="progress-bar-wrap"><div class="progress-bar-fill" id="pb-${c.name.replace(/\s/g,'-')}" style="width:0%"></div></div> 
+<div class="progress-count" id="pc-${c.name.replace(/\s/g,'-')}">—</div> 
+</div>`).join(''); 
+
+// Fetch all companies in parallel 
+const results = await Promise.allSettled(selected.map(c=>fetchOneCompany(c))); 
+
+// Merge results 
+results.forEach((res,i)=>{ 
+const c = selected[i]; 
+const key = c.name.replace(/\s/g,'-'); 
+const el = document.getElementById('cc-'+key); 
+if(res.status==='fulfilled' && res.value.length>0){ 
+all_jobs = all_jobs.concat(res.value); 
+document.getElementById('pc-'+key).textContent = res.value.length+' jobs'; 
+document.getElementById('pb-'+key).style.width='100%'; 
+if(el){ el.classList.add('done'); el.querySelector('.co-check-status').textContent='✓ '+res.value.length; } 
+} else { 
+if(el){ el.classList.add('error'); el.querySelector('.co-check-status').textContent='✗ blocked'; } 
+document.getElementById('pc-'+key).textContent='blocked'; 
+} 
+}); 
+
+const count = all_jobs.length; 
+statusEl.className = count>0 ? 'fetch-status success' : 'fetch-status error'; 
+statusEl.textContent = count>0 
+? `✓ ${count} jobs loaded from ${results.filter(r=>r.status==='fulfilled'&&r.value.length>0).length} companies · ${new Date().toLocaleTimeString()}` 
+: '✗ All requests blocked (CORS) — works when hosted on a real domain'; 
+
+if(count>0){ 
+buildFilters(); 
+renderRoles(); 
+document.getElementById('sb-roles').textContent = count; 
+document.getElementById('live-roles-count').textContent = count; 
+document.getElementById('roles-footer').style.display='flex'; 
+} else { 
+container.innerHTML = corsErrorHTML(selected); 
+} 
+
+btn.disabled=false; btn.classList.remove('spinning'); 
+setTimeout(()=>{ progressDiv.style.display='none'; }, 3000); 
+} 
+
+async function fetchOneCompany(c){ 
+if(c.ats==='Greenhouse') return fetchGreenhouse(c); 
+if(c.ats==='Workable') return fetchWorkable(c); 
+return fetchWorkday(c); 
+} 
+
+// ── WORKDAY FETCHER ── 
+async function fetchWorkday(c){ 
+const BASE = `https://${c.subdomain}.wd${c.wdNum}.myworkdayjobs.com/wday/cxs/${c.subdomain}/${c.tenant}/jobs`; 
+const LIMIT = 20; 
+const key = c.name.replace(/\s/g,'-'); 
+let allJobs=[], offset=0, total=null; 
+
+const first = await wdPost(BASE, 0, LIMIT); 
+if(!first?.jobPostings) throw new Error('No jobPostings'); 
+total = first.total || first.jobPostings.length; 
+allJobs = allJobs.concat(first.jobPostings); 
+setPBar(key, allJobs.length, total); 
+
+const pages = Math.ceil(total/LIMIT); 
+for(let p=1; p<pages; p++){ 
+try{ 
+const page = await wdPost(BASE, p*LIMIT, LIMIT); 
+if(page?.jobPostings) allJobs=allJobs.concat(page.jobPostings); 
+setPBar(key, allJobs.length, total); 
+} catch(e){ break; } 
+} 
+return allJobs.map(j=>normalizeJob(j, c.name, `https://${c.subdomain}.wd${c.wdNum}.myworkdayjobs.com/${c.tenant}`)); 
+} 
+
+async function wdPost(url, offset, limit){ 
+const res = await fetch(url, { 
+method:'POST', 
+headers:{'Content-Type':'application/json','Accept':'application/json'}, 
+body: JSON.stringify({ limit, offset, searchText:'', locations:[], categories:[] }) 
+}); 
+if(!res.ok) throw new Error(`HTTP ${res.status}`); 
+return res.json(); 
+} 
+
+// ── GREENHOUSE FETCHER ── 
+async function fetchGreenhouse(c){ 
+const key = c.name.replace(/\s/g,'-'); 
+const res = await fetch(`https://boards-api.greenhouse.io/v1/boards/${c.tenant}/jobs?content=true`); 
+if(!res.ok) throw new Error(`HTTP ${res.status}`); 
+const data = await res.json(); 
+const jobs = data.jobs||[]; 
+setPBar(key, jobs.length, jobs.length); 
+return jobs.map(j=>({ 
+id: String(j.id), 
+company: c.name, 
+title: j.title||'', 
+dept: j.departments?.[0]?.name||'', 
+location: j.location?.name||'', 
+posted: j.updated_at ? new Date(j.updated_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '', 
+url: j.absolute_url||`https://boards.greenhouse.io/${c.tenant}`, 
+})); 
+} 
+
+// ── WORKABLE FETCHER ── 
+async function fetchWorkable(c){ 
+const key = c.name.replace(/\s/g,'-'); 
+const res = await fetch(`https://apply.workable.com/api/v3/accounts/${c.tenant}/jobs`, { 
+method:'POST', headers:{'Content-Type':'application/json'}, 
+body: JSON.stringify({ query:'', location:[], department:[], remote:[], workplace:[], employment_type:[] }) 
+}); 
+if(!res.ok) throw new Error(`HTTP ${res.status}`); 
+const data = await res.json(); 
+const jobs = data.results||[]; 
+setPBar(key, jobs.length, jobs.length); 
+return jobs.map(j=>({ 
+id: j.shortcode||String(Math.random()), 
+company: c.name, 
+title: j.title||'', 
+dept: j.department||'', 
+location: [j.city, j.state, j.country].filter(Boolean).join(', '), 
+posted: j.published_on ? new Date(j.published_on).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '', 
+url: `https://apply.workable.com/${c.tenant}/j/${j.shortcode}/`, 
+})); 
+} 
+
+function setPBar(key, done, total){ 
+const pct = total>0 ? Math.round((done/total)*100) : 100; 
+const pb = document.getElementById('pb-'+key); 
+const pc = document.getElementById('pc-'+key); 
+if(pb) pb.style.width=pct+'%'; 
+if(pc) pc.textContent = total>0 ? `${done}/${total}` : done+' jobs'; 
+} 
+
+function normalizeJob(j, company, baseUrl){ 
+const title = j.title||j.jobPostingTitle||''; 
+const loc = (j.locationsText||j.primaryLocation||j.bulletFields?.[0]||'').replace(/^\|+/,'').trim(); 
+const dept = (j.jobCategory||j.categories?.[0]?.value||'').trim(); 
+const posted = j.postedOn ? new Date(j.postedOn).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''; 
+const id = (j.bulletFields?.[1]||j.externalPath||String(Math.random())).replace(/\//g,'_'); 
+const path = j.externalPath||''; 
+const url = path ? `https://${baseUrl.split('//')[1]?.split('/')[0]}${path}` : baseUrl; 
+return { id:`${company}_${id}`, company, title, dept, location:loc, posted, url }; 
+} 
+
+function corsErrorHTML(selected){ 
+return `<div class="fetch-empty"> 
+<div class="fetch-empty-icon" style="color:var(--danger)"> 
+<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> 
+</div> 
+<div class="fetch-empty-title">Requests blocked by browser CORS policy</div> 
+<div class="fetch-empty-sub"> 
+Career site APIs block requests from local file:// environments.<br> 
+This works automatically when hosted on a real domain.<br><br> 
+<strong style="color:var(--accent)">Visit careers sites directly:</strong> 
+</div> 
+<div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px"> 
+${selected.map(c=>`<a href="${buildCareerUrl(c)}" target="_blank" rel="noopener" 
+style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:6px 14px;border-radius:5px;border:1px solid var(--border);color:var(--accent);text-decoration:none;background:rgba(79,255,176,0.07)"> 
+${esc(c.name)} → 
+</a>`).join('')} 
+</div> 
+</div>`; 
+} 
+
+function buildCareerUrl(c){ 
+if(c.ats==='Workday') return `https://${c.subdomain}.wd${c.wdNum}.myworkdayjobs.com/${c.tenant}`; 
+if(c.ats==='Greenhouse') return `https://boards.greenhouse.io/${c.tenant}`; 
+if(c.ats==='Workable') return `https://apply.workable.com/${c.tenant}`; 
+return '#'; 
+} 
+
+// ── FILTERS & RENDER ── 
+function buildFilters(){ 
+const companies = [...new Set(all_jobs.map(j=>j.company).filter(Boolean))].sort(); 
+const depts = [...new Set(all_jobs.map(j=>j.dept).filter(Boolean))].sort(); 
+const locs = [...new Set(all_jobs.map(j=>j.location).filter(Boolean))].sort(); 
+
+const cEl = document.getElementById('r-company'); 
+cEl.innerHTML='<option value="">All Companies</option>'+companies.map(d=>`<option>${esc(d)}</option>`).join(''); 
+
+const dEl = document.getElementById('r-dept'); 
+dEl.innerHTML='<option value="">All Departments</option>'+depts.map(d=>`<option>${esc(d)}</option>`).join(''); 
+
+const lEl = document.getElementById('r-loc'); 
+lEl.innerHTML='<option value="">All Locations</option>'+locs.map(l=>`<option>${esc(l)}</option>`).join(''); 
+
+document.getElementById('roles-filters').style.display='flex'; 
+} 
+
+function getFilteredRoles(){ 
+const q = (document.getElementById('r-search')?.value||'').toLowerCase(); 
+const co = document.getElementById('r-company')?.value||''; 
+const dept = document.getElementById('r-dept')?.value||''; 
+const loc = document.getElementById('r-loc')?.value||''; 
+return all_jobs.filter(r=>{ 
+const mQ = !q || r.title.toLowerCase().includes(q) || r.dept.toLowerCase().includes(q) || r.location.toLowerCase().includes(q) || r.company.toLowerCase().includes(q); 
+return mQ && (!co||r.company===co) && (!dept||r.dept===dept) && (!loc||r.location===loc); 
+}); 
+} 
+
+function clearRoleFilters(){ 
+['r-search','r-company','r-dept','r-loc'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); 
+document.getElementById('r-clear-btn').style.display='none'; 
+renderRoles(); 
+} 
+
+function renderRoles(){ 
+const list = getFilteredRoles(); 
+pfizer_filtered = list; 
+const container = document.getElementById('roles-container'); 
+if(!container) return; 
+const countEl = document.getElementById('r-count'); 
+if(countEl) countEl.textContent = list.length+' roles'; 
+const q = document.getElementById('r-search')?.value||''; 
+const co = document.getElementById('r-company')?.value||''; 
+const de = document.getElementById('r-dept')?.value||''; 
+const lo = document.getElementById('r-loc')?.value||''; 
+const cb = document.getElementById('r-clear-btn'); 
+if(cb) cb.style.display=(q||co||de||lo)?'inline-flex':'none'; 
+if(!list.length && all_jobs.length>0){ 
+container.innerHTML='<div class="roles-empty">No roles match your filters</div>'; return; 
+} 
+if(!list.length) return; 
+container.innerHTML='<div class="roles-grid">'+list.map(r=>roleCardHTML(r)).join('')+'</div>'; 
+} 
+
+function roleCardHTML(r){ 
+const added = addedRoleSet.has(r.id); 
+const safeR = JSON.stringify({id:r.id,title:r.title,dept:r.dept||'',location:r.location||'',url:r.url,company:r.company}).replace(/"/g,'&quot;'); 
+return `<div class="role-card" onclick="window.open('${esc(r.url)}','_blank')"> 
+<div class="role-card-left"> 
+<div class="role-company" style="font-size:0.72rem;margin-bottom:2px">${esc(r.company)}</div> 
+<div class="role-title">${esc(r.title)}</div> 
+${r.dept?`<div class="role-dept">${esc(r.dept)}</div>`:''} 
+<div class="role-tags"> 
+${r.location?`<span class="role-tag rt-loc">📍 ${esc(r.location)}</span>`:''} 
+${r.posted?`<span class="role-tag rt-loc">${esc(r.posted)}</span>`:''} 
+</div> 
+</div> 
+<div class="role-card-right" onclick="event.stopPropagation()"> 
+<a class="btn-role-view" href="${esc(r.url)}" target="_blank" rel="noopener"> 
+<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> 
+View 
+</a> 
+<button class="btn-role-add ${added?'added':''}" onclick="addRoleToTracker(${safeR},this)"> 
+${added 
+?`<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Added` 
+:`<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> + Tracker` 
+} 
+</button> 
+</div> 
+</div>`; 
+} 
+
+function addRoleToTracker(r, btn){ 
+if(addedRoleSet.has(r.id)) return; 
+addedRoleSet.add(r.id); saveAddedRoles(); 
+if(!jobs.find(j=>j.company===r.company&&j.role===r.title)){ 
+jobs.push({ 
+id:uid(), company:r.company, role:r.title, url:r.url, 
+area:'Diversified', jobtype:'Full-Time', 
+level:inferLevel(r.title), func:inferFunc(r.title, r.dept||''), 
+stage:'Sourced', priority:'med', recruiter:'', 
+notes:`Dept: ${r.dept||'—'}\nLocation: ${r.location||'—'}\nSource: ${r.company} career site (live fetch)`.trim(), 
+date:todayStr(), interviews:[], 
+activity:[{text:`Added from ${r.company} Live Jobs`, time:new Date().toISOString()}] 
+}); 
+saveJobs(); 
+} 
+btn.classList.add('added'); 
+btn.innerHTML=`<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Added`; 
+btn.onclick=null; 
+document.getElementById('tracker-badge').textContent=jobs.length; 
+updateTrackerStats(); 
+showToast(`${r.company} — ${r.title.slice(0,35)}… added`); 
+} 
+
+function exportRolesCSV(){ 
+const list = pfizer_filtered.length ? pfizer_filtered : all_jobs; 
+if(!list.length){ showToast('No roles loaded — fetch first'); return; } 
+const headers=['Company','Title','Department','Location','Posted','URL']; 
+const rows=list.map(r=>[r.company,r.title,r.dept,r.location,r.posted,r.url].map(v=>'"'+(String(v||'').replace(/"/g,'""'))+'"')); 
+const csv=[headers.join(','),...rows.map(r=>r.join(','))].join('\n'); 
+const blob=new Blob([csv],{type:'text/csv'}); 
+const a=document.createElement('a'); 
+a.href=URL.createObjectURL(blob); 
+a.download=`pharma-jobs-${todayStr()}.csv`; 
+a.click(); URL.revokeObjectURL(a.href); 
+showToast(`Exported ${list.length} roles to CSV`); 
+} 
+
+function skeletons(n){ 
+return Array(n).fill(0).map(()=>` 
+<div class="role-skeleton"> 
+<div class="skel-line" style="width:25%;height:10px;margin-bottom:6px"></div> 
+<div class="skel-line" style="width:60%;height:16px"></div> 
+<div class="skel-line" style="width:35%;height:11px;margin-top:10px"></div> 
+<div class="skel-line" style="width:45%;height:11px"></div> 
+</div>`).join(''); 
+} 
+
+async function fetchPfizerJobs(){ 
+const btn = document.getElementById('btn-fetch'); 
+const statusEl = document.getElementById('fetch-status'); 
+const container = document.getElementById('roles-container'); 
+
+// UI: loading state 
+btn.disabled = true; 
+btn.classList.add('spinning'); 
+statusEl.className = 'fetch-status loading'; 
+statusEl.textContent = 'Connecting to Pfizer Workday…'; 
+container.innerHTML = skeletons(6); 
+
+// Workday undocumented JSON endpoint — called from browser avoids CORS 
+const BASE = 'https://pfizer.wd1.myworkdayjobs.com/wday/cxs/pfizer/PfizerCareers/jobs'; 
+const LIMIT = 20; 
+let offset = 0; 
+let total = null; 
+let allJobs = []; 
+
+try { 
+// First page — discover total 
+const first = await wdFetch(BASE, offset, LIMIT); 
+if(!first || !first.jobPostings) throw new Error('Unexpected response format'); 
+total = first.total || first.jobPostings.length; 
+allJobs = allJobs.concat(first.jobPostings); 
+statusEl.textContent = `Fetching ${total} jobs…`; 
+
+// Fetch remaining pages in batches of 5 
+const pages = Math.ceil(total / LIMIT); 
+const remaining = []; 
+for(let p = 1; p < pages; p++) remaining.push(wdFetch(BASE, p * LIMIT, LIMIT)); 
+
+const batchSize = 5; 
+for(let i = 0; i < remaining.length; i += batchSize){ 
+const batch = await Promise.all(remaining.slice(i, i + batchSize)); 
+batch.forEach(r => { if(r && r.jobPostings) allJobs = allJobs.concat(r.jobPostings); }); 
+const pct = Math.round(((i + batchSize) / remaining.length) * 100); 
+statusEl.textContent = `Fetching… ${Math.min(pct,100)}% (${allJobs.length}/${total} jobs)`; 
+} 
+
+pfizer_jobs = allJobs.map(normalizeJob); 
+buildFilters(); 
+renderRoles(); 
+
+const count = pfizer_jobs.length; 
+statusEl.className = 'fetch-status success'; 
+statusEl.textContent = `✓ ${count} jobs loaded · ${new Date().toLocaleTimeString()}`; 
+document.getElementById('sb-roles').textContent = count; 
+document.getElementById('live-roles-count').textContent = count; 
+document.getElementById('roles-footer').style.display = 'flex'; 
+document.getElementById('footer-text').textContent = 
+`${count} live jobs from pfizer.wd1.myworkdayjobs.com · Fetched ${new Date().toLocaleDateString()} · Click any role to view on Pfizer's site`; 
+
+} catch(err) { 
+console.error('Pfizer fetch error:', err); 
+statusEl.className = 'fetch-status error'; 
+statusEl.textContent = `Error: ${err.message}`; 
+
+// CORS fallback — show message and link to careers page 
+container.innerHTML = ` 
+<div class="fetch-empty"> 
+<div class="fetch-empty-icon" style="color:var(--danger)"> 
+<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> 
+</div> 
+<div class="fetch-empty-title">CORS blocked by browser</div> 
+<div class="fetch-empty-sub"> 
+Pfizer's Workday site blocks cross-origin requests from the browser security sandbox.<br><br> 
+<strong style="color:var(--accent)">To view all Pfizer jobs directly:</strong> 
+</div> 
+<a href="https://pfizer.wd1.myworkdayjobs.com/PfizerCareers" target="_blank" rel="noopener" 
+style="display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#0d0f14;padding:10px 24px;border-radius:var(--radius);font-family:'Instrument Sans',sans-serif;font-weight:600;font-size:0.85rem;text-decoration:none;margin-top:8px"> 
+<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> 
+Open Pfizer Careers on Workday 
+</a> 
+<div class="fetch-empty-sub" style="margin-top:16px"> 
+The Workday JSON API works when accessed directly from your browser but is blocked in sandboxed file: environments.<br> 
+When hosted on a real domain (e.g. via Bubble or Vercel), this fetch will work automatically. 
+</div> 
+</div>`; 
+} 
+
+btn.disabled = false; 
+btn.classList.remove('spinning'); 
+} 
+
+async function wdFetch(url, offset, limit){ 
+const res = await fetch(url, { 
+method: 'POST', 
+headers: { 
+'Content-Type': 'application/json', 
+'Accept': 'application/json', 
+}, 
+body: JSON.stringify({ 
+limit, 
+offset, 
+searchText: '', 
+locations: [], 
+categories: [] 
+}) 
+}); 
+if(!res.ok) throw new Error(`HTTP ${res.status}`); 
+return res.json(); 
+} 
+
+function normalizeJob(j){ 
+// Workday job posting shape 
+const title = j.title || j.jobPostingTitle || ''; 
+const loc = (j.locationsText || j.primaryLocation || j.bulletFields?.[0] || '').replace(/^\|+/, '').trim(); 
+const dept = (j.jobCategory || j.categories?.[0]?.value || '').trim(); 
+const posted = j.postedOn ? new Date(j.postedOn).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''; 
+const id = j.bulletFields?.[1] || j.externalPath || String(Math.random()); 
+const path = j.externalPath || ''; 
+const url = path ? `https://pfizer.wd1.myworkdayjobs.com${path}` : 'https://pfizer.wd1.myworkdayjobs.com/PfizerCareers'; 
+return { id, title, location:loc, dept, posted, url, raw:j }; 
+} 
+
+function buildFilters(){ 
+const depts = [...new Set(pfizer_jobs.map(j=>j.dept).filter(Boolean))].sort(); 
+const locs = [...new Set(pfizer_jobs.map(j=>j.location).filter(Boolean))].sort(); 
+
+const dEl = document.getElementById('r-dept'); 
+dEl.innerHTML = '<option value="">All Departments</option>' + 
+depts.map(d=>`<option value="${esc(d)}">${esc(d)}</option>`).join(''); 
+
+const lEl = document.getElementById('r-loc'); 
+lEl.innerHTML = '<option value="">All Locations</option>' + 
+locs.map(l=>`<option value="${esc(l)}">${esc(l)}</option>`).join(''); 
+
+document.getElementById('roles-filters').style.display = 'flex'; 
+} 
+
+function getFilteredRoles(){ 
+const q = (document.getElementById('r-search')?.value||'').toLowerCase(); 
+const dept = document.getElementById('r-dept')?.value||''; 
+const loc = document.getElementById('r-loc')?.value||''; 
+return pfizer_jobs.filter(r=>{ 
+const mQ = !q || r.title.toLowerCase().includes(q) || r.dept.toLowerCase().includes(q) || r.location.toLowerCase().includes(q); 
+const mD = !dept || r.dept===dept; 
+const mL = !loc || r.location===loc; 
+return mQ && mD && mL; 
+}); 
+} 
+
+function clearRoleFilters(){ 
+document.getElementById('r-search').value=''; 
+document.getElementById('r-dept').value=''; 
+document.getElementById('r-loc').value=''; 
+document.getElementById('r-clear-btn').style.display='none'; 
+renderRoles(); 
+} 
+
+function renderRoles(){ 
+const list = getFilteredRoles(); 
+pfizer_filtered = list; 
+const container = document.getElementById('roles-container'); 
+if(!container) return; 
+const countEl = document.getElementById('r-count'); 
+if(countEl) countEl.textContent = list.length+' roles'; 
+
+// Show/hide clear btn 
+const q = document.getElementById('r-search')?.value||''; 
+const dept = document.getElementById('r-dept')?.value||''; 
+const loc = document.getElementById('r-loc')?.value||''; 
+const clearBtn = document.getElementById('r-clear-btn'); 
+if(clearBtn) clearBtn.style.display = (q||dept||loc) ? 'inline-flex' : 'none'; 
+
+if(!list.length && pfizer_jobs.length>0){ 
+container.innerHTML='<div class="roles-empty">No roles match your filters</div>'; 
+return; 
+} 
+if(!list.length) return; // still empty state 
+
+container.innerHTML = '<div class="roles-grid">'+list.map(r=>roleCardHTML(r)).join('')+'</div>'; 
+} 
+
+function roleCardHTML(r){ 
+const added = addedRoleSet.has(r.id); 
+return `<div class="role-card" onclick="window.open('${esc(r.url)}','_blank')"> 
+<div class="role-card-left"> 
+<div class="role-title">${esc(r.title)}</div> 
+${r.dept?`<div class="role-dept">${esc(r.dept)}</div>`:''} 
+<div class="role-tags"> 
+${r.location?`<span class="role-tag rt-loc">📍 ${esc(r.location)}</span>`:''} 
+${r.posted?`<span class="role-tag rt-loc">${esc(r.posted)}</span>`:''} 
+</div> 
+</div> 
+<div class="role-card-right" onclick="event.stopPropagation()"> 
+<a class="btn-role-view" href="${esc(r.url)}" target="_blank" rel="noopener"> 
+<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> 
+View 
+</a> 
+<button class="btn-role-add ${added?'added':''}" onclick="addRoleToTracker(${JSON.stringify({id:r.id,title:r.title,dept:r.dept,location:r.location,url:r.url}).replace(/"/g,'&quot;')},this)"> 
+${added 
+? `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Added` 
+: `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> + Tracker` 
+} 
+</button> 
+</div> 
+</div>`; 
+} 
+
+function addRoleToTracker(r, btn){ 
+if(addedRoleSet.has(r.id)) return; 
+addedRoleSet.add(r.id); saveAddedRoles(); 
+if(!jobs.find(j=>j.company==='Pfizer'&&j.role===r.title)){ 
+jobs.push({ 
+id:uid(), company:'Pfizer', role:r.title, 
+url:r.url, 
+area:'Diversified', jobtype:'Full-Time', 
+level: inferLevel(r.title), func: inferFunc(r.title, r.dept||''), 
+stage:'Sourced', priority:'med', recruiter:'', 
+notes:`Dept: ${r.dept||'—'}\nLocation: ${r.location||'—'}\nSource: Pfizer Workday (live fetch)`.trim(), 
+date:todayStr(), interviews:[], 
+activity:[{text:'Added from Pfizer Live Jobs', time:new Date().toISOString()}] 
+}); 
+saveJobs(); 
+} 
+btn.classList.add('added'); 
+btn.innerHTML=`<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Added`; 
+btn.onclick=null; 
+document.getElementById('tracker-badge').textContent = jobs.length; 
+updateTrackerStats(); 
+showToast(`Pfizer — ${r.title.slice(0,35)}… added`); 
+} 
+
+function inferLevel(title){ 
+const t = title.toLowerCase(); 
+if(t.includes('chief') || t.includes('cso') || t.includes('coo')) return 'C-Suite'; 
+if(t.includes('executive vice') || t.includes('evp')) return 'SVP / EVP'; 
+if(t.includes('senior vice') || t.includes('svp')) return 'SVP / EVP'; 
+if(t.includes('vice president') || t.includes(' vp ') || t.startsWith('vp ')) return 'VP'; 
+if(t.includes('senior director')) return 'Senior Director'; 
+if(t.includes('director')) return 'Director'; 
+if(t.includes('senior manager')) return 'Senior Manager'; 
+if(t.includes('manager')) return 'Manager'; 
+if(t.includes('associate director')) return 'Associate Director'; 
+if(t.includes('associate')) return 'Associate'; 
+return 'Other'; 
+} 
+
+function inferFunc(title, dept){ 
+const t = (title+' '+dept).toLowerCase(); 
+if(t.includes('forecast')) return 'Forecasting'; 
+if(t.includes('market research')) return 'Market Research'; 
+if(t.includes('market access') || t.includes('payer') || t.includes('reimburs')) return 'Market Access'; 
+if(t.includes('medical affairs') || t.includes('medical science') || t.includes('msl')) return 'Medical Affairs'; 
+if(t.includes('insight') || t.includes('analytics') || t.includes('intelligence')) return 'Commercial Analytics'; 
+if(t.includes('marketing')) return 'Marketing'; 
+if(t.includes('clinical')) return 'Clinical'; 
+if(t.includes('regulatory')) return 'Regulatory'; 
+if(t.includes('finance') || t.includes('fp&a') || t.includes('pricing')) return 'Finance'; 
+if(t.includes('strategy') || t.includes('business development') || t.includes('bd')) return 'Strategy'; 
+if(t.includes('supply') || t.includes('manufactur') || t.includes('operations')) return 'Operations'; 
+return 'Other'; 
+} 
+
+function exportRolesCSV(){ 
+const list = pfizer_filtered.length ? pfizer_filtered : pfizer_jobs; 
+if(!list.length){ showToast('No roles loaded — fetch first'); return; } 
+const headers = ['Title','Department','Location','Posted','URL']; 
+const rows = list.map(r=>[r.title,r.dept,r.location,r.posted,r.url].map(v=>'"'+(String(v||'').replace(/"/g,'""'))+'"')); 
+const csv = [headers.join(','),...rows.map(r=>r.join(','))].join('\n'); 
+const blob = new Blob([csv],{type:'text/csv'}); 
+const a = document.createElement('a'); 
+a.href = URL.createObjectURL(blob); 
+a.download = `pfizer-jobs-${todayStr()}.csv`; 
+a.click(); URL.revokeObjectURL(a.href); 
+showToast(`Exported ${list.length} Pfizer roles to CSV`); 
+} 
+
+function skeletons(n){ 
+return Array(n).fill(0).map(()=>` 
+<div class="role-skeleton"> 
+<div class="skel-line" style="width:60%;height:16px"></div> 
+<div class="skel-line" style="width:30%;height:11px;margin-top:10px"></div> 
+<div class="skel-line" style="width:45%;height:11px"></div> 
+</div>`).join(''); 
+} 
+
+// ══════════════════════════════════════════ 
+// INIT 
+// ══════════════════════════════════════════ 
+document.getElementById('lib-count').textContent = COMPANIES.length; 
+document.getElementById('lib-badge').textContent = COMPANIES.length; 
+document.getElementById('sb-companies').textContent = COMPANIES.length; 
+document.getElementById('sb-roles').textContent = 'Live'; 
+document.getElementById('live-roles-count').textContent = FETCH_COMPANIES.length+' sources'; 
+buildCompanyCheckboxes(); 
+loadJobs(); 
+renderTracker(); 
+</script> 
+
+</body> 
+</html> 
+
